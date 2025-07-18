@@ -26,10 +26,17 @@ La pipeline installe automatiquement :
 - ✅ Dependencies
 - ✅ Build & Deploy
 
+### 3. Configuration DNS (obligatoire)
+
+Ajoutez un enregistrement DNS pour le sous-domaine :
+- **Type** : A ou CNAME
+- **Nom** : `streaming`
+- **Valeur** : IP de votre serveur ou `ssh.thimotefetu.fr`
+
 ### 4. Accès
 
-- **Application**: `http://ssh.thimotefetu.fr`
-- **Fichiers média**: `http://ssh.thimotefetu.fr/media/`
+- **Application**: `http://streaming.thimotefetu.fr`
+- **Fichiers média**: `http://streaming.thimotefetu.fr/media/`
 
 ## Développement local
 
