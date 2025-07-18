@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "server": "node server.js",
-    "start": "npm run build && npm run server"
+    "start": "node server.js"
   },
   "dependencies": {
     "@types/node": "^24.0.14",
