@@ -58,15 +58,30 @@ const executeSSH = (command) => {
 // Get all categories
 app.get('/api/categories', async (req, res) => {
   try {
-    const command = `ssh -i ~/.ssh/streaming_key -o PasswordAuthentication=no -o StrictHostKeyChecking=no ${SSH_SERVER} "ls -la ${SSH_PATH}"`;
-    const output = await executeSSH(command);
+    let directories = [];
     
-    const lines = output.split('\n').filter(line => line.trim());
-    const directories = lines
-      .filter(line => line.startsWith('d'))
-      .map(line => line.split(/\s+/).pop())
-      .filter(dir => dir && !dir.startsWith('.'))
-      .filter(dir => ['Films', 'Séries', 'Musiques'].includes(dir));
+    if (USE_LOCAL_FILES) {
+      // Use local filesystem
+      if (fs.existsSync(MEDIA_PATH)) {
+        const items = fs.readdirSync(MEDIA_PATH);
+        directories = items.filter(item => {
+          const itemPath = path.join(MEDIA_PATH, item);
+          return fs.statSync(itemPath).isDirectory() && 
+                 ['Films', 'Séries', 'Musiques'].includes(item);
+        });
+      }
+    } else {
+      // Use SSH
+      const command = `ssh -i ~/.ssh/streaming_key -o PasswordAuthentication=no -o StrictHostKeyChecking=no ${SSH_SERVER} "ls -la ${SSH_PATH}"`;
+      const output = await executeSSH(command);
+      
+      const lines = output.split('\n').filter(line => line.trim());
+      directories = lines
+        .filter(line => line.startsWith('d'))
+        .map(line => line.split(/\s+/).pop())
+        .filter(dir => dir && !dir.startsWith('.'))
+        .filter(dir => ['Films', 'Séries', 'Musiques'].includes(dir));
+    }
     
     const categories = await Promise.all(
       directories.map(async (dir) => {
