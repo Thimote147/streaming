@@ -35,8 +35,8 @@ Ajoutez un enregistrement DNS pour le sous-domaine :
 
 ### 4. Accès
 
-- **Application**: `https://streaming.thimotefetu.fr:7443` ou `http://streaming.thimotefetu.fr:7000`
-- **Fichiers média**: `https://streaming.thimotefetu.fr:7443/media/`
+- **Application**: `http://streaming.thimotefetu.fr` (Cloudflare DNS → port 7000)
+- **Fichiers média**: `http://streaming.thimotefetu.fr/media/`
 - **API directe**: `http://streaming.thimotefetu.fr:3001`
 
 *Note: Le certificat SSL sera automatiquement généré lors du premier déploiement*
