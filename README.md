@@ -35,9 +35,11 @@ Ajoutez un enregistrement DNS pour le sous-domaine :
 
 ### 4. Accès
 
-- **Application**: `http://streaming.thimotefetu.fr:7000`
-- **Fichiers média**: `http://streaming.thimotefetu.fr:7000/media/`
+- **Application**: `https://streaming.thimotefetu.fr`
+- **Fichiers média**: `https://streaming.thimotefetu.fr/media/`
 - **API directe**: `http://streaming.thimotefetu.fr:3001`
+
+*Note: Le certificat SSL sera automatiquement généré lors du premier déploiement*
 
 ## Développement local
 
