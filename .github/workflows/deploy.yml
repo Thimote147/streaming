@@ -96,7 +96,20 @@ jobs:
           docker-compose ps
           
           echo "📜 Recent logs:"
-          docker-compose logs --tail=10
+          docker-compose logs --tail=20
+          
+          echo "🔍 Debugging container health:"
+          docker ps -a
+          docker-compose ps
+          
+          # Check if container is running and healthy
+          if [ "$(docker ps -q -f name=streaming)" ]; then
+            echo "✅ Container is running"
+            docker logs streaming --tail=10
+          else
+            echo "❌ Container is not running"
+            docker logs streaming --tail=20 || echo "No logs available"
+          fi
           
           echo "✅ Deployment completed!"
           echo "🌐 Application available at: http://streaming.thimotefetu.fr"
