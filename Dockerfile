@@ -28,7 +28,6 @@ RUN npm ci --only=production
 
 # Copy backend source
 COPY server.js ./
-COPY src/api ./src/api
 
 # Copy built frontend from builder stage
 COPY --from=builder /app/dist ./dist
