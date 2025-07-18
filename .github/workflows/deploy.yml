@@ -19,30 +19,12 @@ jobs:
         node-version: '18'
         cache: 'npm'
     
-    - name: Install dependencies
-      run: npm ci
-    
-    - name: Build application
-      run: npm run build
-    
-    - name: Clean for deployment
+    - name: Install dependencies and lint
       run: |
-        rm -rf node_modules
-        rm -rf .git
-        rm -rf test-media
+        npm ci
+        npm run lint
     
-    - name: Copy files to server
-      uses: appleboy/scp-action@v0.1.7
-      with:
-        host: ${{ secrets.HOST }}
-        username: ${{ secrets.USERNAME }}
-        key: ${{ secrets.SSH_KEY }}
-        port: ${{ secrets.PORT }}
-        source: "."
-        target: "~/streaming"
-        rm: true
-    
-    - name: Install dependencies and deploy
+    - name: Deploy to server
       uses: appleboy/ssh-action@v1.0.3
       with:
         host: ${{ secrets.HOST }}
@@ -54,6 +36,9 @@ jobs:
           set -e
           
           echo "🚀 Starting deployment..."
+          
+          # Create deployment directory
+          mkdir -p ~/streaming
           
           # Install Docker if not present
           if ! command -v docker &> /dev/null; then
@@ -75,59 +60,43 @@ jobs:
             sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
             sudo chmod +x /usr/local/bin/docker-compose
           fi
+    
+    - name: Sync project files
+      uses: appleboy/scp-action@v0.1.7
+      with:
+        host: ${{ secrets.HOST }}
+        username: ${{ secrets.USERNAME }}
+        key: ${{ secrets.SSH_KEY }}
+        port: ${{ secrets.PORT }}
+        source: "."
+        target: "~/streaming"
+        rm: true
+        exclude: "node_modules,.git,.github,test-media,dist"
+      
+    - name: Build and restart container
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.HOST }}
+        username: ${{ secrets.USERNAME }}
+        key: ${{ secrets.SSH_KEY }}
+        port: ${{ secrets.PORT }}
+        timeout: 300s
+        script: |
+          set -e
           
-          # Install Node.js if not present
-          if ! command -v node &> /dev/null; then
-            echo "📦 Installing Node.js..."
-            curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-            sudo apt-get install -y nodejs
-          fi
-          
-          # Navigate to app directory
           cd ~/streaming
           
-          # Install dependencies
-          echo "📦 Installing dependencies..."
-          npm ci
-          
-          # Build application
-          echo "🔨 Building application..."
-          npm run build
-          
-          # Stop existing containers
-          echo "🛑 Stopping existing containers..."
+          echo "🛑 Stopping existing container..."
           docker-compose down || true
           
-          # Build and start new containers
-          echo "🐳 Building and starting containers..."
+          echo "🐳 Building and starting container..."
           docker-compose up -d --build
           
-          # Install and configure SSL certificate
-          echo "🔒 Setting up SSL certificate..."
-          if ! command -v certbot &> /dev/null; then
-            sudo apt install -y certbot python3-certbot-nginx
-          fi
-          
-          # Generate SSL certificate (only if not exists)
-          if [ ! -f /etc/letsencrypt/live/streaming.thimotefetu.fr/fullchain.pem ]; then
-            sudo certbot certonly --standalone --non-interactive --agree-tos \
-              --email admin@thimotefetu.fr \
-              --domains streaming.thimotefetu.fr \
-              --http-01-port 8080 \
-              --pre-hook "docker-compose stop nginx" \
-              --post-hook "docker-compose start nginx"
-          fi
-          
-          # Wait for containers to start
-          sleep 10
-          
-          # Show container status
           echo "📊 Container status:"
           docker-compose ps
           
-          # Show logs
           echo "📜 Recent logs:"
-          docker-compose logs --tail=20
+          docker-compose logs --tail=10
           
           echo "✅ Deployment completed!"
-          echo "🌐 Application available at: https://streaming.thimotefetu.fr"
+          echo "🌐 Application available at: http://streaming.thimotefetu.fr"
