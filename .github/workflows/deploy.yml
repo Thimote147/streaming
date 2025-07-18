@@ -25,6 +25,12 @@ jobs:
     - name: Build application
       run: npm run build
     
+    - name: Clean for deployment
+      run: |
+        rm -rf node_modules
+        rm -rf .git
+        rm -rf test-media
+    
     - name: Copy files to server
       uses: appleboy/scp-action@v0.1.7
       with:
@@ -35,7 +41,6 @@ jobs:
         source: "."
         target: "~/streaming"
         rm: true
-        exclude: "node_modules,.git"
     
     - name: Install dependencies and deploy
       uses: appleboy/ssh-action@v1.0.3
