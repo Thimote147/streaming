@@ -35,8 +35,9 @@ Ajoutez un enregistrement DNS pour le sous-domaine :
 
 ### 4. Accès
 
-- **Application**: `http://streaming.thimotefetu.fr`
-- **Fichiers média**: `http://streaming.thimotefetu.fr/media/`
+- **Application**: `http://streaming.thimotefetu.fr:8080`
+- **Fichiers média**: `http://streaming.thimotefetu.fr:8080/media/`
+- **API directe**: `http://streaming.thimotefetu.fr:3001`
 
 ## Développement local
 

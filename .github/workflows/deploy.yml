@@ -109,4 +109,4 @@ jobs:
           docker-compose logs --tail=20
           
           echo "✅ Deployment completed!"
-          echo "🌐 Application available at: http://${{ secrets.HOST }}"
+          echo "🌐 Application available at: http://streaming.thimotefetu.fr:8080"
