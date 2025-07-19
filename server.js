@@ -56,7 +56,7 @@ const executeSSH = (command) => {
 };
 
 // Get all categories
-app.get('/api/categories', async (req, res) => {
+app.get('/api/categories', async (_req, res) => {
   try {
     let directories = [];
     
@@ -374,7 +374,7 @@ const extractGenre = (filename) => {
 };
 
 // Serve React app for all other routes
-app.get('*', (req, res) => {
+app.get('*', (_req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 

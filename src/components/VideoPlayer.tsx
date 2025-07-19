@@ -142,9 +142,20 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible }) 
       setIsFullscreen(!!document.fullscreenElement);
     };
 
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+
     document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
-  }, []);
+    document.addEventListener('keydown', handleKeyDown);
+    
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onClose]);
 
   if (!isVisible) return null;
 
@@ -165,7 +176,10 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible }) 
           src={`/api/stream/${encodeURIComponent(media.path)}`}
           autoPlay
           preload="metadata"
-          onClick={togglePlay}
+          onClick={(e) => {
+            e.stopPropagation();
+            togglePlay();
+          }}
         />
 
         {/* Loading Overlay */}
@@ -192,7 +206,10 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible }) 
               <div className="absolute top-4 left-4 right-4 flex justify-between items-center">
                 <h2 className="text-white text-xl font-semibold">{media.title}</h2>
                 <button
-                  onClick={onClose}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onClose();
+                  }}
                   className="text-white hover:text-gray-300 p-2 transition-colors"
                 >
                   <X size={24} />
