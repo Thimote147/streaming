@@ -344,7 +344,7 @@ app.get('/api/stream/:path(*)', async (req, res) => {
         const checkFFmpegCommand = `ssh -i ~/.ssh/streaming_key -o PasswordAuthentication=no -o StrictHostKeyChecking=no ${SSH_SERVER} "which ffmpeg"`;
         console.log('Checking FFmpeg availability:', checkFFmpegCommand);
         
-        exec(checkFFmpegCommand, (error, stdout, stderr) => {
+        exec(checkFFmpegCommand, (error, stdout) => {
           if (error) {
             console.error('FFmpeg not found on server:', error);
             // Fallback to direct streaming without transcoding
@@ -372,8 +372,9 @@ app.get('/api/stream/:path(*)', async (req, res) => {
           res.setHeader('Accept-Ranges', 'bytes');
           res.setHeader('Cache-Control', 'no-cache');
           
-          const transcodeCommand = `ssh -i ~/.ssh/streaming_key -o PasswordAuthentication=no -o StrictHostKeyChecking=no ${SSH_SERVER} "ffmpeg -i '${filePath}' -c:v libx264 -c:a aac -preset ultrafast -movflags frag_keyframe+empty_moov -f mp4 -"`;
-          console.log('Transcoding:', transcodeCommand);
+          // Simpler approach: just ensure audio is in AAC format
+          const transcodeCommand = `ssh -i ~/.ssh/streaming_key -o PasswordAuthentication=no -o StrictHostKeyChecking=no ${SSH_SERVER} "ffmpeg -i '${filePath}' -c:a aac -c:v copy -f mp4 -movflags faststart+frag_keyframe+empty_moov -"`;
+          console.log('Transcoding with AAC audio:', transcodeCommand);
           
           const child = exec(transcodeCommand, { timeout: 300000 });
           
@@ -393,7 +394,12 @@ app.get('/api/stream/:path(*)', async (req, res) => {
           });
           
           child.stderr.on('data', (data) => {
-            console.error('FFmpeg stderr:', data.toString());
+            const stderrText = data.toString();
+            console.log('FFmpeg progress:', stderrText);
+            // Only log errors, not progress info
+            if (stderrText.includes('Error') || stderrText.includes('Invalid') || stderrText.includes('could not')) {
+              console.error('FFmpeg error:', stderrText);
+            }
           });
         });
       }
