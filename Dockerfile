@@ -18,9 +18,6 @@ RUN npm run lint && npm run build
 # Stage 2: Backend
 FROM node:18-alpine AS backend
 
-# Install FFmpeg for transcoding
-RUN apk add --no-cache ffmpeg
-
 WORKDIR /app
 
 # Copy package files
@@ -34,9 +31,6 @@ COPY server.js ./
 
 # Copy built frontend from builder stage
 COPY --from=builder /app/dist ./dist
-
-# Create cache directory for converted files
-RUN mkdir -p /app/converted-cache
 
 # Expose port
 EXPOSE 3001

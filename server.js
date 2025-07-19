@@ -12,20 +12,12 @@ const PORT = process.env.PORT || 3001;
 
 // Media configuration
 const MEDIA_PATH = process.env.MEDIA_PATH || path.join(__dirname, 'test-media');
-const CACHE_PATH = process.env.CACHE_PATH || path.join(__dirname, 'converted-cache');
 const SSH_SERVER = process.env.SSH_SERVER || 'ssh.thimotefetu.fr';
 const SSH_PATH = process.env.SSH_PATH || '/mnt/streaming';
 const USE_LOCAL_FILES = process.env.USE_LOCAL_FILES === 'true' || false;
 
-// Create cache directory if it doesn't exist
-if (!fs.existsSync(CACHE_PATH)) {
-  fs.mkdirSync(CACHE_PATH, { recursive: true });
-  console.log('Created cache directory:', CACHE_PATH);
-}
-
 console.log('USE_LOCAL_FILES:', USE_LOCAL_FILES);
 console.log('MEDIA_PATH:', MEDIA_PATH);
-console.log('CACHE_PATH:', CACHE_PATH);
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'dist')));
@@ -185,7 +177,7 @@ const getCategoryItems = async (category) => {
             const filePath = path.join(dir, file);
             if (fs.statSync(filePath).isDirectory()) {
               getAllFiles(filePath, fileList);
-            } else if (/\.(mp4|mkv|avi|mov|mp3|flac|wav)$/i.test(file)) {
+            } else if (/\.(mp4|webm)$/i.test(file)) {
               fileList.push(filePath);
             }
           });
@@ -196,7 +188,7 @@ const getCategoryItems = async (category) => {
       }
     } else {
       // Use SSH
-      const command = `ssh -i ~/.ssh/streaming_key -o PasswordAuthentication=no -o StrictHostKeyChecking=no ${SSH_SERVER} "find ${SSH_PATH}/${category} -type f \\( -name '*.mp4' -o -name '*.mkv' -o -name '*.avi' -o -name '*.mov' -o -name '*.mp3' -o -name '*.flac' -o -name '*.wav' \\)"`;
+      const command = `ssh -i ~/.ssh/streaming_key -o PasswordAuthentication=no -o StrictHostKeyChecking=no ${SSH_SERVER} "find ${SSH_PATH}/${category} -type f \\( -name '*.mp4' -o -name '*.webm' \\)"`;
       const output = await executeSSH(command);
       files = output.split('\n').filter(line => line.trim());
     }
@@ -297,7 +289,7 @@ app.get('/api/stream/:path(*)', async (req, res) => {
     console.log('Streaming request for:', filePath);
     
     if (USE_LOCAL_FILES) {
-      // Serve file from local filesystem with on-demand conversion for non-MP4 files
+      // Serve MP4/WebM files directly from local filesystem
       const localFilePath = path.join(MEDIA_PATH, filePath);
       console.log('Serving local file:', localFilePath);
       
@@ -307,80 +299,16 @@ app.get('/api/stream/:path(*)', async (req, res) => {
       }
       
       const ext = path.extname(filePath).toLowerCase();
-      const isMP4Compatible = ['.mp4', '.webm'].includes(ext);
-      
-      if (isMP4Compatible) {
-        // Direct serving for MP4/WebM files
+      if (['.mp4', '.webm'].includes(ext)) {
         res.sendFile(localFilePath);
       } else {
-        // On-demand conversion for other formats
-        const fileName = path.basename(filePath, ext);
-        const fileHash = Buffer.from(filePath).toString('base64').replace(/[/+=]/g, '_');
-        const convertedFilePath = path.join(CACHE_PATH, `${fileHash}.mp4`);
-        
-        console.log(`Checking for converted file: ${convertedFilePath}`);
-        
-        if (fs.existsSync(convertedFilePath)) {
-          // Serve already converted file
-          console.log('Serving converted MP4 file from cache');
-          res.sendFile(convertedFilePath);
-        } else {
-          // Stream with real-time transcoding (faster than full conversion)
-          console.log(`Streaming with transcoding: ${localFilePath}`);
-          
-          res.setHeader('Content-Type', 'video/mp4');
-          res.setHeader('Accept-Ranges', 'bytes');
-          res.setHeader('Cache-Control', 'no-cache');
-          
-          // Ultra-fast streaming transcoding
-          const streamCommand = `ffmpeg -i "${localFilePath}" -c:v copy -c:a aac -preset ultrafast -threads 0 -movflags frag_keyframe+empty_moov -f mp4 -`;
-          console.log('Stream transcoding command:', streamCommand);
-          
-          const streamChild = exec(streamCommand, { timeout: 300000 });
-          
-          streamChild.stdout.on('data', (chunk) => {
-            res.write(chunk);
-          });
-          
-          streamChild.stdout.on('end', () => {
-            res.end();
-            
-            // Start background conversion for next time
-            console.log('Starting background conversion for caching...');
-            const cacheCommand = `ffmpeg -i "${localFilePath}" -c:v copy -c:a aac -preset fast -threads 0 -movflags +faststart "${convertedFilePath}"`;
-            
-            const cacheChild = exec(cacheCommand, { timeout: 1800000 });
-            cacheChild.on('close', (code) => {
-              if (code === 0) {
-                console.log(`Background conversion completed: ${convertedFilePath}`);
-              } else {
-                console.error(`Background conversion failed with code: ${code}`);
-              }
-            });
-          });
-          
-          streamChild.on('error', (error) => {
-            console.error('Stream transcode error:', error);
-            if (!res.headersSent) {
-              res.status(500).send('Stream error: ' + error.message);
-            }
-          });
-          
-          streamChild.stderr.on('data', (data) => {
-            const stderrText = data.toString();
-            if (stderrText.includes('Error') || stderrText.includes('Invalid')) {
-              console.error('Stream transcode error:', stderrText);
-            }
-          });
-        }
+        res.status(415).send('Unsupported media type. Only MP4 and WebM files are supported.');
       }
     } else {
-      // Development: serve via SSH with FFmpeg transcoding for non-MP4 files
+      // Serve MP4/WebM files via SSH
       const ext = path.extname(filePath).toLowerCase();
-      const isMP4Compatible = ['.mp4', '.webm'].includes(ext);
       
-      if (isMP4Compatible) {
-        // Direct streaming for MP4/WebM files
+      if (['.mp4', '.webm'].includes(ext)) {
         const mimeTypes = {
           '.mp4': 'video/mp4',
           '.webm': 'video/webm'
@@ -391,7 +319,7 @@ app.get('/api/stream/:path(*)', async (req, res) => {
         res.setHeader('Cache-Control', 'no-cache');
         
         const streamCommand = `ssh -i ~/.ssh/streaming_key -o PasswordAuthentication=no -o StrictHostKeyChecking=no ${SSH_SERVER} "cat '${filePath}'"`;
-        console.log('Direct streaming:', streamCommand);
+        console.log('SSH streaming:', streamCommand);
         
         const child = exec(streamCommand, { timeout: 300000 });
         
@@ -404,7 +332,7 @@ app.get('/api/stream/:path(*)', async (req, res) => {
         });
         
         child.on('error', (error) => {
-          console.error('Stream error:', error);
+          console.error('SSH stream error:', error);
           if (!res.headersSent) {
             res.status(500).send('Stream error: ' + error.message);
           }
@@ -414,71 +342,7 @@ app.get('/api/stream/:path(*)', async (req, res) => {
           console.error('SSH stderr:', data.toString());
         });
       } else {
-        // FFmpeg transcoding for other formats
-        console.log(`Transcoding ${ext} file: ${filePath}`);
-        
-        // First check if FFmpeg is available on the server
-        const checkFFmpegCommand = `ssh -i ~/.ssh/streaming_key -o PasswordAuthentication=no -o StrictHostKeyChecking=no ${SSH_SERVER} "which ffmpeg"`;
-        console.log('Checking FFmpeg availability:', checkFFmpegCommand);
-        
-        exec(checkFFmpegCommand, (error, stdout) => {
-          if (error) {
-            console.error('FFmpeg not found on server:', error);
-            // Fallback to direct streaming without transcoding
-            res.setHeader('Content-Type', 'video/mp4');
-            res.setHeader('Accept-Ranges', 'bytes');
-            res.setHeader('Cache-Control', 'no-cache');
-            
-            const fallbackCommand = `ssh -i ~/.ssh/streaming_key -o PasswordAuthentication=no -o StrictHostKeyChecking=no ${SSH_SERVER} "cat '${filePath}'"`;
-            console.log('Fallback to direct streaming:', fallbackCommand);
-            
-            const fallbackChild = exec(fallbackCommand, { timeout: 300000 });
-            fallbackChild.stdout.pipe(res);
-            fallbackChild.on('error', (err) => {
-              console.error('Fallback stream error:', err);
-              if (!res.headersSent) {
-                res.status(500).send('Stream error: ' + err.message);
-              }
-            });
-            return;
-          }
-          
-          console.log('FFmpeg found at:', stdout.trim());
-          
-          res.setHeader('Content-Type', 'video/mp4');
-          res.setHeader('Accept-Ranges', 'bytes');
-          res.setHeader('Cache-Control', 'no-cache');
-          
-          // Simpler approach: just ensure audio is in AAC format
-          const transcodeCommand = `ssh -i ~/.ssh/streaming_key -o PasswordAuthentication=no -o StrictHostKeyChecking=no ${SSH_SERVER} "ffmpeg -i '${filePath}' -c:a aac -c:v copy -f mp4 -movflags faststart+frag_keyframe+empty_moov -"`;
-          console.log('Transcoding with AAC audio:', transcodeCommand);
-          
-          const child = exec(transcodeCommand, { timeout: 300000 });
-          
-          child.stdout.on('data', (chunk) => {
-            res.write(chunk);
-          });
-          
-          child.stdout.on('end', () => {
-            res.end();
-          });
-          
-          child.on('error', (error) => {
-            console.error('Transcode error:', error);
-            if (!res.headersSent) {
-              res.status(500).send('Transcode error: ' + error.message);
-            }
-          });
-          
-          child.stderr.on('data', (data) => {
-            const stderrText = data.toString();
-            console.log('FFmpeg progress:', stderrText);
-            // Only log errors, not progress info
-            if (stderrText.includes('Error') || stderrText.includes('Invalid') || stderrText.includes('could not')) {
-              console.error('FFmpeg error:', stderrText);
-            }
-          });
-        });
+        res.status(415).send('Unsupported media type. Only MP4 and WebM files are supported.');
       }
     }
   } catch (error) {
@@ -532,23 +396,6 @@ app.get('*', (_req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
-// Check conversion status endpoint
-app.get('/api/conversion-status/:path(*)', (req, res) => {
-  try {
-    const filePath = decodeURIComponent(req.params.path);
-    const fileHash = Buffer.from(filePath).toString('base64').replace(/[/+=]/g, '_');
-    const convertedFilePath = path.join(CACHE_PATH, `${fileHash}.mp4`);
-    
-    if (fs.existsSync(convertedFilePath)) {
-      res.json({ status: 'completed', convertedFile: `${fileHash}.mp4` });
-    } else {
-      res.json({ status: 'converting' });
-    }
-  } catch (error) {
-    console.error('Error checking conversion status:', error);
-    res.status(500).json({ error: 'Error checking conversion status' });
-  }
-});
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
