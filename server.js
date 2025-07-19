@@ -288,14 +288,56 @@ app.get('/api/stream/:path(*)', async (req, res) => {
     console.log('Streaming request for:', filePath);
     
     if (USE_LOCAL_FILES) {
-      // Serve file directly from local filesystem
+      // Serve file from local filesystem with transcoding for non-MP4 files
       const localFilePath = path.join(MEDIA_PATH, filePath);
       console.log('Serving local file:', localFilePath);
       
-      if (fs.existsSync(localFilePath)) {
+      if (!fs.existsSync(localFilePath)) {
+        res.status(404).send('File not found');
+        return;
+      }
+      
+      const ext = path.extname(filePath).toLowerCase();
+      const isMP4Compatible = ['.mp4', '.webm'].includes(ext);
+      
+      if (isMP4Compatible) {
+        // Direct serving for MP4/WebM files
         res.sendFile(localFilePath);
       } else {
-        res.status(404).send('File not found');
+        // FFmpeg transcoding for other formats
+        console.log(`Transcoding local ${ext} file: ${localFilePath}`);
+        
+        res.setHeader('Content-Type', 'video/mp4');
+        res.setHeader('Accept-Ranges', 'bytes');
+        res.setHeader('Cache-Control', 'no-cache');
+        
+        const transcodeCommand = `ffmpeg -i "${localFilePath}" -c:a aac -c:v copy -f mp4 -movflags faststart+frag_keyframe+empty_moov -`;
+        console.log('Local transcoding command:', transcodeCommand);
+        
+        const child = exec(transcodeCommand, { timeout: 300000 });
+        
+        child.stdout.on('data', (chunk) => {
+          res.write(chunk);
+        });
+        
+        child.stdout.on('end', () => {
+          res.end();
+        });
+        
+        child.on('error', (error) => {
+          console.error('Local transcode error:', error);
+          if (!res.headersSent) {
+            res.status(500).send('Transcode error: ' + error.message);
+          }
+        });
+        
+        child.stderr.on('data', (data) => {
+          const stderrText = data.toString();
+          console.log('FFmpeg local progress:', stderrText);
+          if (stderrText.includes('Error') || stderrText.includes('Invalid') || stderrText.includes('could not')) {
+            console.error('FFmpeg local error:', stderrText);
+          }
+        });
       }
     } else {
       // Development: serve via SSH with FFmpeg transcoding for non-MP4 files
