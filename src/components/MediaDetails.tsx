@@ -196,7 +196,7 @@ const MediaDetails: React.FC<MediaDetailsProps> = ({
                           whileHover={{ scale: 1.02 }}
                           whileTap={{ scale: 0.98 }}
                           transition={{ 
-                            hover: { duration: 0.2 }
+                            duration: 0.2
                           }}
                         >
                           <Play size={14} fill="currentColor" />
@@ -210,7 +210,7 @@ const MediaDetails: React.FC<MediaDetailsProps> = ({
                             whileHover={{ scale: 1.02 }}
                             whileTap={{ scale: 0.98 }}
                             transition={{ 
-                              hover: { duration: 0.2 }
+                              duration: 0.2
                             }}
                           >
                             <Plus size={14} />
@@ -264,7 +264,7 @@ const MediaDetails: React.FC<MediaDetailsProps> = ({
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
                         transition={{ 
-                          hover: { duration: 0.2 }
+                          duration: 0.2
                         }}
                       >
                         <Play size={16} className="md:w-5 md:h-5" fill="currentColor" />
@@ -278,7 +278,7 @@ const MediaDetails: React.FC<MediaDetailsProps> = ({
                           whileHover={{ scale: 1.05 }}
                           whileTap={{ scale: 0.95 }}
                           transition={{ 
-                            hover: { duration: 0.2 }
+                            duration: 0.2
                           }}
                         >
                           <Plus size={16} className="md:w-5 md:h-5" />
@@ -321,7 +321,7 @@ const MediaDetails: React.FC<MediaDetailsProps> = ({
                         {media.type === 'series' ? 'Épisodes' : 'Films de la saga'}
                       </h3>
                       <div className="space-y-2 md:space-y-3 max-h-72 md:max-h-96 overflow-y-auto transition-all duration-300 ease-out">
-                        {media.episodes?.map((episode, index) => (
+                        {media.episodes?.map((episode) => (
                           <motion.div
                             key={episode.id}
                             className="flex items-center p-3 md:p-4 bg-gray-800/50 rounded-lg hover:bg-gray-700/50 transition-colors cursor-pointer"
@@ -329,7 +329,7 @@ const MediaDetails: React.FC<MediaDetailsProps> = ({
                             whileHover={{ scale: 1.02 }}
                             whileTap={{ scale: 0.98 }}
                             transition={{ 
-                              hover: { duration: 0.2 }
+                              duration: 0.2
                             }}
                           >
                             <div className="flex-shrink-0 w-16 h-10 md:w-20 md:h-12 bg-gray-600 rounded overflow-hidden mr-3 md:mr-4 relative">
