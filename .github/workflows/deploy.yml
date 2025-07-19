@@ -90,6 +90,7 @@ jobs:
           docker-compose down || true
           
           echo "🐳 Building and starting container..."
+          export TMDB_API_KEY="${{ secrets.TMDB_API_KEY }}"
           docker-compose build --no-cache
           docker-compose up -d
           

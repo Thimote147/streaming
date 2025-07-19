@@ -10,4 +10,5 @@ services:
       - NODE_ENV=production
       - MEDIA_PATH=/app/media
       - USE_LOCAL_FILES=true
+      - TMDB_API_KEY=${TMDB_API_KEY}
     restart: unless-stopped
