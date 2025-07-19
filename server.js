@@ -298,51 +298,74 @@ app.get('/api/stream/:path(*)', async (req, res) => {
         res.status(404).send('File not found');
       }
     } else {
-      // Development: serve via SSH (slow but works)
+      // Development: serve via SSH with FFmpeg transcoding for non-MP4 files
       const ext = path.extname(filePath).toLowerCase();
-      const mimeTypes = {
-        '.mp4': 'video/mp4',
-        '.webm': 'video/webm',
-        '.mkv': 'video/x-matroska',
-        '.avi': 'video/x-msvideo',
-        '.mov': 'video/quicktime',
-        '.wmv': 'video/x-ms-wmv',
-        '.flv': 'video/x-flv',
-        '.mp3': 'audio/mpeg',
-        '.wav': 'audio/wav',
-        '.ogg': 'audio/ogg',
-        '.aac': 'audio/aac',
-        '.m4a': 'audio/mp4'
-      };
+      const isMP4Compatible = ['.mp4', '.webm'].includes(ext);
       
-      const contentType = mimeTypes[ext] || 'application/octet-stream';
-      res.setHeader('Content-Type', contentType);
-      res.setHeader('Accept-Ranges', 'bytes');
-      res.setHeader('Cache-Control', 'no-cache');
-      
-      const streamCommand = `ssh -i ~/.ssh/streaming_key -o PasswordAuthentication=no -o StrictHostKeyChecking=no ${SSH_SERVER} "cat '${filePath}'"`;
-      console.log('Executing:', streamCommand);
-      
-      const child = exec(streamCommand, { timeout: 300000 });
-      
-      child.stdout.on('data', (chunk) => {
-        res.write(chunk);
-      });
-      
-      child.stdout.on('end', () => {
-        res.end();
-      });
-      
-      child.on('error', (error) => {
-        console.error('Stream error:', error);
-        if (!res.headersSent) {
-          res.status(500).send('Stream error: ' + error.message);
-        }
-      });
-      
-      child.stderr.on('data', (data) => {
-        console.error('SSH stderr:', data.toString());
-      });
+      if (isMP4Compatible) {
+        // Direct streaming for MP4/WebM files
+        const mimeTypes = {
+          '.mp4': 'video/mp4',
+          '.webm': 'video/webm'
+        };
+        
+        res.setHeader('Content-Type', mimeTypes[ext]);
+        res.setHeader('Accept-Ranges', 'bytes');
+        res.setHeader('Cache-Control', 'no-cache');
+        
+        const streamCommand = `ssh -i ~/.ssh/streaming_key -o PasswordAuthentication=no -o StrictHostKeyChecking=no ${SSH_SERVER} "cat '${filePath}'"`;
+        console.log('Direct streaming:', streamCommand);
+        
+        const child = exec(streamCommand, { timeout: 300000 });
+        
+        child.stdout.on('data', (chunk) => {
+          res.write(chunk);
+        });
+        
+        child.stdout.on('end', () => {
+          res.end();
+        });
+        
+        child.on('error', (error) => {
+          console.error('Stream error:', error);
+          if (!res.headersSent) {
+            res.status(500).send('Stream error: ' + error.message);
+          }
+        });
+        
+        child.stderr.on('data', (data) => {
+          console.error('SSH stderr:', data.toString());
+        });
+      } else {
+        // FFmpeg transcoding for other formats
+        res.setHeader('Content-Type', 'video/mp4');
+        res.setHeader('Accept-Ranges', 'bytes');
+        res.setHeader('Cache-Control', 'no-cache');
+        
+        const transcodeCommand = `ssh -i ~/.ssh/streaming_key -o PasswordAuthentication=no -o StrictHostKeyChecking=no ${SSH_SERVER} "ffmpeg -i '${filePath}' -c:v libx264 -c:a aac -preset ultrafast -movflags frag_keyframe+empty_moov -f mp4 -"`;
+        console.log('Transcoding:', transcodeCommand);
+        
+        const child = exec(transcodeCommand, { timeout: 300000 });
+        
+        child.stdout.on('data', (chunk) => {
+          res.write(chunk);
+        });
+        
+        child.stdout.on('end', () => {
+          res.end();
+        });
+        
+        child.on('error', (error) => {
+          console.error('Transcode error:', error);
+          if (!res.headersSent) {
+            res.status(500).send('Transcode error: ' + error.message);
+          }
+        });
+        
+        child.stderr.on('data', (data) => {
+          console.error('FFmpeg stderr:', data.toString());
+        });
+      }
     }
   } catch (error) {
     console.error('Error in stream endpoint:', error);

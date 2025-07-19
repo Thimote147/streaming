@@ -18,6 +18,9 @@ RUN npm run lint && npm run build
 # Stage 2: Backend
 FROM node:18-alpine AS backend
 
+# Install FFmpeg for transcoding
+RUN apk add --no-cache ffmpeg
+
 WORKDIR /app
 
 # Copy package files
