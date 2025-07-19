@@ -119,7 +119,7 @@ class StreamingAPI {
   cleanMovieTitle(filename: string): string {
     return filename
       .replace(/\.(mp4|mkv|avi|mov|webm)$/i, '') // Remove file extensions
-      .replace(/[\[\(].*?[\]\)]/g, '') // Remove content in brackets/parentheses
+      .replace(/[[(].*?[\])]/g, '') // Remove content in brackets/parentheses
       .replace(/\b(19|20)\d{2}\b/g, '') // Remove years
       .replace(/\b(CAM|TS|TC|SCR|R5|DVDRip|BRRip|BluRay|1080p|720p|480p|HDTV|WEBRip|x264|x265|HEVC|AAC|AC3|DTS|IMAX)\b/gi, '') // Remove quality tags
       .replace(/[._-]/g, ' ') // Replace dots, underscores, dashes with spaces
