@@ -338,32 +338,63 @@ app.get('/api/stream/:path(*)', async (req, res) => {
         });
       } else {
         // FFmpeg transcoding for other formats
-        res.setHeader('Content-Type', 'video/mp4');
-        res.setHeader('Accept-Ranges', 'bytes');
-        res.setHeader('Cache-Control', 'no-cache');
+        console.log(`Transcoding ${ext} file: ${filePath}`);
         
-        const transcodeCommand = `ssh -i ~/.ssh/streaming_key -o PasswordAuthentication=no -o StrictHostKeyChecking=no ${SSH_SERVER} "ffmpeg -i '${filePath}' -c:v libx264 -c:a aac -preset ultrafast -movflags frag_keyframe+empty_moov -f mp4 -"`;
-        console.log('Transcoding:', transcodeCommand);
+        // First check if FFmpeg is available on the server
+        const checkFFmpegCommand = `ssh -i ~/.ssh/streaming_key -o PasswordAuthentication=no -o StrictHostKeyChecking=no ${SSH_SERVER} "which ffmpeg"`;
+        console.log('Checking FFmpeg availability:', checkFFmpegCommand);
         
-        const child = exec(transcodeCommand, { timeout: 300000 });
-        
-        child.stdout.on('data', (chunk) => {
-          res.write(chunk);
-        });
-        
-        child.stdout.on('end', () => {
-          res.end();
-        });
-        
-        child.on('error', (error) => {
-          console.error('Transcode error:', error);
-          if (!res.headersSent) {
-            res.status(500).send('Transcode error: ' + error.message);
+        exec(checkFFmpegCommand, (error, stdout, stderr) => {
+          if (error) {
+            console.error('FFmpeg not found on server:', error);
+            // Fallback to direct streaming without transcoding
+            res.setHeader('Content-Type', 'video/mp4');
+            res.setHeader('Accept-Ranges', 'bytes');
+            res.setHeader('Cache-Control', 'no-cache');
+            
+            const fallbackCommand = `ssh -i ~/.ssh/streaming_key -o PasswordAuthentication=no -o StrictHostKeyChecking=no ${SSH_SERVER} "cat '${filePath}'"`;
+            console.log('Fallback to direct streaming:', fallbackCommand);
+            
+            const fallbackChild = exec(fallbackCommand, { timeout: 300000 });
+            fallbackChild.stdout.pipe(res);
+            fallbackChild.on('error', (err) => {
+              console.error('Fallback stream error:', err);
+              if (!res.headersSent) {
+                res.status(500).send('Stream error: ' + err.message);
+              }
+            });
+            return;
           }
-        });
-        
-        child.stderr.on('data', (data) => {
-          console.error('FFmpeg stderr:', data.toString());
+          
+          console.log('FFmpeg found at:', stdout.trim());
+          
+          res.setHeader('Content-Type', 'video/mp4');
+          res.setHeader('Accept-Ranges', 'bytes');
+          res.setHeader('Cache-Control', 'no-cache');
+          
+          const transcodeCommand = `ssh -i ~/.ssh/streaming_key -o PasswordAuthentication=no -o StrictHostKeyChecking=no ${SSH_SERVER} "ffmpeg -i '${filePath}' -c:v libx264 -c:a aac -preset ultrafast -movflags frag_keyframe+empty_moov -f mp4 -"`;
+          console.log('Transcoding:', transcodeCommand);
+          
+          const child = exec(transcodeCommand, { timeout: 300000 });
+          
+          child.stdout.on('data', (chunk) => {
+            res.write(chunk);
+          });
+          
+          child.stdout.on('end', () => {
+            res.end();
+          });
+          
+          child.on('error', (error) => {
+            console.error('Transcode error:', error);
+            if (!res.headersSent) {
+              res.status(500).send('Transcode error: ' + error.message);
+            }
+          });
+          
+          child.stderr.on('data', (data) => {
+            console.error('FFmpeg stderr:', data.toString());
+          });
         });
       }
     }
