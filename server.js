@@ -12,11 +12,20 @@ const PORT = process.env.PORT || 3001;
 
 // Media configuration
 const MEDIA_PATH = process.env.MEDIA_PATH || path.join(__dirname, 'test-media');
+const CACHE_PATH = process.env.CACHE_PATH || path.join(__dirname, 'converted-cache');
 const SSH_SERVER = process.env.SSH_SERVER || 'ssh.thimotefetu.fr';
 const SSH_PATH = process.env.SSH_PATH || '/mnt/streaming';
 const USE_LOCAL_FILES = process.env.USE_LOCAL_FILES === 'true' || false;
+
+// Create cache directory if it doesn't exist
+if (!fs.existsSync(CACHE_PATH)) {
+  fs.mkdirSync(CACHE_PATH, { recursive: true });
+  console.log('Created cache directory:', CACHE_PATH);
+}
+
 console.log('USE_LOCAL_FILES:', USE_LOCAL_FILES);
 console.log('MEDIA_PATH:', MEDIA_PATH);
+console.log('CACHE_PATH:', CACHE_PATH);
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'dist')));
@@ -306,18 +315,19 @@ app.get('/api/stream/:path(*)', async (req, res) => {
       } else {
         // On-demand conversion for other formats
         const fileName = path.basename(filePath, ext);
-        const dirPath = path.dirname(localFilePath);
-        const convertedFilePath = path.join(dirPath, `${fileName}.mp4`);
+        const fileHash = Buffer.from(filePath).toString('base64').replace(/[/+=]/g, '_');
+        const convertedFilePath = path.join(CACHE_PATH, `${fileHash}.mp4`);
         
         console.log(`Checking for converted file: ${convertedFilePath}`);
         
         if (fs.existsSync(convertedFilePath)) {
           // Serve already converted file
-          console.log('Serving converted MP4 file');
+          console.log('Serving converted MP4 file from cache');
           res.sendFile(convertedFilePath);
         } else {
           // Start conversion and show progress
           console.log(`Starting conversion of ${ext} file: ${localFilePath}`);
+          console.log(`Will save to cache: ${convertedFilePath}`);
           
           res.setHeader('Content-Type', 'application/json');
           res.json({
@@ -338,6 +348,10 @@ app.get('/api/stream/:path(*)', async (req, res) => {
               console.log(`Conversion completed successfully: ${convertedFilePath}`);
             } else {
               console.error(`Conversion failed with code: ${code}`);
+              // Clean up failed conversion file
+              if (fs.existsSync(convertedFilePath)) {
+                fs.unlinkSync(convertedFilePath);
+              }
             }
           });
           
@@ -514,14 +528,11 @@ app.get('*', (_req, res) => {
 app.get('/api/conversion-status/:path(*)', (req, res) => {
   try {
     const filePath = decodeURIComponent(req.params.path);
-    const localFilePath = path.join(MEDIA_PATH, filePath);
-    const ext = path.extname(filePath).toLowerCase();
-    const fileName = path.basename(filePath, ext);
-    const dirPath = path.dirname(localFilePath);
-    const convertedFilePath = path.join(dirPath, `${fileName}.mp4`);
+    const fileHash = Buffer.from(filePath).toString('base64').replace(/[/+=]/g, '_');
+    const convertedFilePath = path.join(CACHE_PATH, `${fileHash}.mp4`);
     
     if (fs.existsSync(convertedFilePath)) {
-      res.json({ status: 'completed', convertedFile: `${fileName}.mp4` });
+      res.json({ status: 'completed', convertedFile: `${fileHash}.mp4` });
     } else {
       res.json({ status: 'converting' });
     }
