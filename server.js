@@ -20,6 +20,8 @@ const USE_LOCAL_FILES = process.env.USE_LOCAL_FILES === 'true' || false;
 
 console.log('USE_LOCAL_FILES:', USE_LOCAL_FILES);
 console.log('MEDIA_PATH:', MEDIA_PATH);
+console.log('TMDB_API_KEY configured:', !!TMDB_API_KEY);
+console.log('TMDB_API_KEY length:', TMDB_API_KEY ? TMDB_API_KEY.length : 0);
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'dist')));
@@ -234,6 +236,17 @@ const getCategoryItems = async (category) => {
   }
 };
 
+// Test endpoint to check TMDB configuration
+app.get('/api/test-tmdb', (_req, res) => {
+  res.json({
+    tmdbConfigured: !!TMDB_API_KEY,
+    tmdbKeyLength: TMDB_API_KEY ? TMDB_API_KEY.length : 0,
+    envVars: Object.keys(process.env).filter(key => key.includes('TMDB')),
+    nodeEnv: process.env.NODE_ENV,
+    allEnvKeys: Object.keys(process.env).slice(0, 10) // First 10 for debug
+  });
+});
+
 // Get movie poster from TMDB with multiple search strategies
 app.get('/api/poster/:title', async (req, res) => {
   try {
@@ -241,10 +254,13 @@ app.get('/api/poster/:title', async (req, res) => {
     const { year } = req.query;
     
     if (!TMDB_API_KEY) {
+      console.error('❌ TMDB API key not found in environment variables');
+      console.error('Available env vars:', Object.keys(process.env).filter(key => key.includes('TMDB')));
       return res.status(500).json({ error: 'TMDB API key not configured' });
     }
     
     const originalTitle = decodeURIComponent(title);
+    console.log('🔍 Searching for movie:', originalTitle, 'year:', year);
     const searchVariants = generateSearchVariants(originalTitle);
     
     let movieResult = null;
