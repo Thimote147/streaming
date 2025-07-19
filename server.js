@@ -288,7 +288,7 @@ app.get('/api/stream/:path(*)', async (req, res) => {
     console.log('Streaming request for:', filePath);
     
     if (USE_LOCAL_FILES) {
-      // Serve file from local filesystem with transcoding for non-MP4 files
+      // Serve file from local filesystem with on-demand conversion for non-MP4 files
       const localFilePath = path.join(MEDIA_PATH, filePath);
       console.log('Serving local file:', localFilePath);
       
@@ -304,40 +304,53 @@ app.get('/api/stream/:path(*)', async (req, res) => {
         // Direct serving for MP4/WebM files
         res.sendFile(localFilePath);
       } else {
-        // FFmpeg transcoding for other formats
-        console.log(`Transcoding local ${ext} file: ${localFilePath}`);
+        // On-demand conversion for other formats
+        const fileName = path.basename(filePath, ext);
+        const dirPath = path.dirname(localFilePath);
+        const convertedFilePath = path.join(dirPath, `${fileName}.mp4`);
         
-        res.setHeader('Content-Type', 'video/mp4');
-        res.setHeader('Accept-Ranges', 'bytes');
-        res.setHeader('Cache-Control', 'no-cache');
+        console.log(`Checking for converted file: ${convertedFilePath}`);
         
-        const transcodeCommand = `ffmpeg -i "${localFilePath}" -c:a aac -c:v copy -f mp4 -movflags faststart+frag_keyframe+empty_moov -`;
-        console.log('Local transcoding command:', transcodeCommand);
-        
-        const child = exec(transcodeCommand, { timeout: 300000 });
-        
-        child.stdout.on('data', (chunk) => {
-          res.write(chunk);
-        });
-        
-        child.stdout.on('end', () => {
-          res.end();
-        });
-        
-        child.on('error', (error) => {
-          console.error('Local transcode error:', error);
-          if (!res.headersSent) {
-            res.status(500).send('Transcode error: ' + error.message);
-          }
-        });
-        
-        child.stderr.on('data', (data) => {
-          const stderrText = data.toString();
-          console.log('FFmpeg local progress:', stderrText);
-          if (stderrText.includes('Error') || stderrText.includes('Invalid') || stderrText.includes('could not')) {
-            console.error('FFmpeg local error:', stderrText);
-          }
-        });
+        if (fs.existsSync(convertedFilePath)) {
+          // Serve already converted file
+          console.log('Serving converted MP4 file');
+          res.sendFile(convertedFilePath);
+        } else {
+          // Start conversion and show progress
+          console.log(`Starting conversion of ${ext} file: ${localFilePath}`);
+          
+          res.setHeader('Content-Type', 'application/json');
+          res.json({
+            status: 'converting',
+            message: 'File is being converted to MP4. Please wait...',
+            originalFile: filePath,
+            estimatedTime: 'Few minutes'
+          });
+          
+          // Start conversion in background
+          const convertCommand = `ffmpeg -i "${localFilePath}" -c:v copy -c:a aac -movflags +faststart "${convertedFilePath}"`;
+          console.log('Conversion command:', convertCommand);
+          
+          const conversionChild = exec(convertCommand, { timeout: 1800000 }); // 30 min timeout
+          
+          conversionChild.on('close', (code) => {
+            if (code === 0) {
+              console.log(`Conversion completed successfully: ${convertedFilePath}`);
+            } else {
+              console.error(`Conversion failed with code: ${code}`);
+            }
+          });
+          
+          conversionChild.stderr.on('data', (data) => {
+            const stderrText = data.toString();
+            if (stderrText.includes('time=')) {
+              console.log('Conversion progress:', stderrText.match(/time=\S+/)?.[0]);
+            }
+            if (stderrText.includes('Error') || stderrText.includes('Invalid')) {
+              console.error('Conversion error:', stderrText);
+            }
+          });
+        }
       }
     } else {
       // Development: serve via SSH with FFmpeg transcoding for non-MP4 files
@@ -495,6 +508,27 @@ const extractGenre = (filename) => {
 // Serve React app for all other routes
 app.get('*', (_req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+});
+
+// Check conversion status endpoint
+app.get('/api/conversion-status/:path(*)', (req, res) => {
+  try {
+    const filePath = decodeURIComponent(req.params.path);
+    const localFilePath = path.join(MEDIA_PATH, filePath);
+    const ext = path.extname(filePath).toLowerCase();
+    const fileName = path.basename(filePath, ext);
+    const dirPath = path.dirname(localFilePath);
+    const convertedFilePath = path.join(dirPath, `${fileName}.mp4`);
+    
+    if (fs.existsSync(convertedFilePath)) {
+      res.json({ status: 'completed', convertedFile: `${fileName}.mp4` });
+    } else {
+      res.json({ status: 'converting' });
+    }
+  } catch (error) {
+    console.error('Error checking conversion status:', error);
+    res.status(500).json({ error: 'Error checking conversion status' });
+  }
 });
 
 app.listen(PORT, () => {
