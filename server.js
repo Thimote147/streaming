@@ -299,7 +299,6 @@ app.get('/api/stream/:path(*)', async (req, res) => {
       }
     } else {
       // Development: serve via SSH (slow but works)
-      res.setHeader('Content-Type', 'video/mp4');
       res.setHeader('Accept-Ranges', 'bytes');
       res.setHeader('Cache-Control', 'no-cache');
       
