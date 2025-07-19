@@ -2,6 +2,7 @@ import React from 'react';
 import { Play, Info, Plus } from 'lucide-react';
 import { motion } from 'framer-motion';
 import type { MediaItem } from '../services/api';
+import { useMovieData } from '../hooks/useMovieData';
 
 interface MediaCardProps {
   media: MediaItem;
@@ -19,6 +20,12 @@ const MediaCard: React.FC<MediaCardProps> = ({
   index = 0 
 }) => {
   const [isHovered, setIsHovered] = React.useState(false);
+  const [imageError, setImageError] = React.useState(false);
+  const { poster, frenchPoster, frenchTitle, loading } = useMovieData(media.title, media.year, media.type);
+  
+  // Use French title and poster if available, otherwise use original
+  const displayTitle = frenchTitle || media.title;
+  const displayPoster = frenchPoster || poster;
 
   const getPlaceholderImage = () => {
     const colors = ['bg-red-900', 'bg-blue-900', 'bg-green-900', 'bg-purple-900', 'bg-yellow-900'];
@@ -50,14 +57,28 @@ const MediaCard: React.FC<MediaCardProps> = ({
       style={{ zIndex: isHovered ? 20 : 1 }}
     >
       {/* Main Card */}
-      <div className="relative group cursor-pointer rounded-lg overflow-hidden bg-gray-800 aspect-video shadow-lg hover:shadow-2xl transition-all duration-300">
-        {/* Placeholder/Thumbnail */}
-        <div className={`absolute inset-0 flex items-center justify-center text-white ${getPlaceholderImage()}`}>
-          <div className="text-center text-white">
-            <div className="text-4xl mb-2">{getTypeIcon()}</div>
-            <div className="text-sm font-medium px-2 text-center">{media.title}</div>
+      <div className="relative group cursor-pointer rounded-lg overflow-hidden bg-gray-800 aspect-[2/3] shadow-lg hover:shadow-2xl transition-all duration-300">
+        {/* Poster or Placeholder */}
+        {displayPoster && !imageError ? (
+          <img 
+            src={displayPoster} 
+            alt={displayTitle}
+            className="absolute inset-0 w-full h-full object-cover transition-opacity duration-300"
+            onError={() => setImageError(true)}
+            onLoad={() => setImageError(false)}
+          />
+        ) : (
+          <div className={`absolute inset-0 flex flex-col items-center justify-center text-white ${getPlaceholderImage()}`}>
+            <div className="text-center text-white p-4">
+              {loading ? (
+                <div className="animate-spin text-5xl mb-4">⏳</div>
+              ) : (
+                <div className="text-6xl mb-4">{getTypeIcon()}</div>
+              )}
+              <div className="text-xs font-medium text-center leading-tight">{displayTitle}</div>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Hover Overlay */}
         <motion.div 
@@ -120,7 +141,7 @@ const MediaCard: React.FC<MediaCardProps> = ({
       {/* Card Info */}
       <div className="mt-3 px-1 relative">
         <h3 className="text-white font-semibold text-sm mb-1 truncate group-hover:text-gray-300 transition-colors">
-          {media.title}
+          {displayTitle}
         </h3>
         
         <div className="flex items-center space-x-2 text-xs text-gray-400 mb-2">
@@ -135,20 +156,6 @@ const MediaCard: React.FC<MediaCardProps> = ({
           <span className="capitalize">{media.type}</span>
         </div>
         
-        {/* Additional info on hover */}
-        {isHovered && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
-            className="absolute bottom-full left-0 right-0 bg-black border border-white/20 rounded-lg p-4 mb-2 z-[999] shadow-2xl min-h-[60px] flex items-center"
-          >
-            <p className="text-white text-sm leading-relaxed">
-              {media.description || `${media.title} - Un contenu ${media.type === 'movie' ? 'film' : media.type === 'series' ? 'série' : 'musical'} disponible sur votre serveur de streaming personnel.`}
-            </p>
-          </motion.div>
-        )}
       </div>
 
     </motion.div>

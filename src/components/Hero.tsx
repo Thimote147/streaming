@@ -2,6 +2,7 @@ import React from 'react';
 import { Play, Info, Volume2, VolumeX } from 'lucide-react';
 import { motion } from 'framer-motion';
 import type { MediaItem } from '../services/api';
+import { useMovieData } from '../hooks/useMovieData';
 
 interface HeroProps {
   featuredMedia?: MediaItem;
@@ -11,6 +12,7 @@ interface HeroProps {
 
 const Hero: React.FC<HeroProps> = ({ featuredMedia, onPlay, onMoreInfo }) => {
   const [isMuted, setIsMuted] = React.useState(true);
+  const { poster, backdrop, frenchTitle, frenchDescription } = useMovieData(featuredMedia?.title || '', featuredMedia?.year, featuredMedia?.type);
 
   const defaultFeaturedMedia: MediaItem = {
     id: 'featured',
@@ -23,21 +25,41 @@ const Hero: React.FC<HeroProps> = ({ featuredMedia, onPlay, onMoreInfo }) => {
   };
 
   const media = featuredMedia || defaultFeaturedMedia;
+  
+  // Use French title and description if available for featured media
+  const displayTitle = featuredMedia && frenchTitle ? frenchTitle : media.title;
+  const displayDescription = featuredMedia && frenchDescription ? frenchDescription : media.description;
 
   return (
     <div className="relative h-screen w-full overflow-hidden">
       {/* Background Image/Video */}
-      <div className="absolute inset-0 bg-gradient-to-r from-gray-900 via-gray-800 to-black">
-        <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent" />
-        <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-transparent to-transparent" />
+      <div className="absolute inset-0">
+        {/* Movie Backdrop/Poster Background */}
+        {(backdrop || poster) && featuredMedia ? (
+          <div 
+            className="absolute inset-0 bg-no-repeat bg-center"
+            style={{
+              backgroundImage: `url(${backdrop || poster})`,
+              backgroundSize: backdrop ? 'contain' : 'cover',
+            }}
+          />
+        ) : (
+          <div className="absolute inset-0 bg-gradient-to-r from-gray-900 via-gray-800 to-black" />
+        )}
         
-        {/* Pattern overlay */}
-        <div className="absolute inset-0 opacity-5">
-          <div className="h-full w-full bg-repeat" style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.1'%3E%3Ccircle cx='30' cy='30' r='4'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
-            backgroundSize: '60px 60px'
-          }} />
-        </div>
+        {/* Gradient Overlays */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/40 to-transparent" />
+        
+        {/* Pattern overlay for non-poster/backdrop backgrounds */}
+        {!backdrop && !poster && (
+          <div className="absolute inset-0 opacity-5">
+            <div className="h-full w-full bg-repeat" style={{
+              backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.1'%3E%3Ccircle cx='30' cy='30' r='4'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+              backgroundSize: '60px 60px'
+            }} />
+          </div>
+        )}
       </div>
 
       {/* Content */}
@@ -50,7 +72,7 @@ const Hero: React.FC<HeroProps> = ({ featuredMedia, onPlay, onMoreInfo }) => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.2 }}
             >
-              {media.title}
+              {displayTitle}
             </motion.h1>
             
             <motion.p 
@@ -59,7 +81,7 @@ const Hero: React.FC<HeroProps> = ({ featuredMedia, onPlay, onMoreInfo }) => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.4 }}
             >
-              {media.description}
+              {displayDescription}
             </motion.p>
 
             {/* Media Info */}

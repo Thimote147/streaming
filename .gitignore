@@ -25,3 +25,6 @@ dist-ssr
 
 # Video files
 test-media/
+
+# Environment files
+.env

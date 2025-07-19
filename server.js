@@ -3,12 +3,14 @@ import { exec } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import 'dotenv/config';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const TMDB_API_KEY = process.env.TMDB_API_KEY;
 
 // Media configuration
 const MEDIA_PATH = process.env.MEDIA_PATH || path.join(__dirname, 'test-media');
@@ -230,6 +232,217 @@ const getCategoryItems = async (category) => {
     console.error(`Error getting ${category} items:`, error);
     return [];
   }
+};
+
+// Get movie poster from TMDB with multiple search strategies
+app.get('/api/poster/:title', async (req, res) => {
+  try {
+    const { title } = req.params;
+    const { year } = req.query;
+    
+    if (!TMDB_API_KEY) {
+      return res.status(500).json({ error: 'TMDB API key not configured' });
+    }
+    
+    const originalTitle = decodeURIComponent(title);
+    const searchVariants = generateSearchVariants(originalTitle);
+    
+    let movieResult = null;
+    
+    // Try each variant until we find a result
+    for (const variant of searchVariants) {
+      const cleanTitle = cleanMovieTitle(variant);
+      const searchQuery = encodeURIComponent(cleanTitle);
+      const yearParam = year ? `&year=${year}` : '';
+      
+      // Try both English and French searches
+      const searches = [
+        `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}&query=${searchQuery}${yearParam}&language=en-US`,
+        `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}&query=${searchQuery}${yearParam}&language=fr-FR`
+      ];
+      
+      for (const url of searches) {
+        try {
+          const response = await fetch(url);
+          if (response.ok) {
+            const data = await response.json();
+            if (data.results && data.results.length > 0) {
+              movieResult = data.results[0];
+              break;
+            }
+          }
+        } catch (searchError) {
+          console.error('Search error:', searchError);
+        }
+      }
+      
+      if (movieResult) break;
+    }
+    
+    if (movieResult) {
+      // Get French translation and French posters if available
+      let frenchTitle = movieResult.title;
+      let frenchOverview = movieResult.overview;
+      let frenchPosterUrl = movieResult.poster_path ? `https://image.tmdb.org/t/p/w500${movieResult.poster_path}` : null;
+      
+      try {
+        // Get French movie details
+        const detailsUrl = `https://api.themoviedb.org/3/movie/${movieResult.id}?api_key=${TMDB_API_KEY}&language=fr-FR`;
+        const detailsResponse = await fetch(detailsUrl);
+        if (detailsResponse.ok) {
+          const frenchData = await detailsResponse.json();
+          if (frenchData.title && frenchData.title.trim()) {
+            frenchTitle = frenchData.title;
+          }
+          if (frenchData.overview && frenchData.overview.trim()) {
+            frenchOverview = frenchData.overview;
+          }
+        }
+
+        // Get French posters
+        const imagesUrl = `https://api.themoviedb.org/3/movie/${movieResult.id}/images?api_key=${TMDB_API_KEY}`;
+        const imagesResponse = await fetch(imagesUrl);
+        if (imagesResponse.ok) {
+          const imagesData = await imagesResponse.json();
+          
+          // Look for French posters first
+          const frenchPosters = imagesData.posters?.filter(poster => 
+            poster.iso_639_1 === 'fr' || poster.iso_639_1 === null
+          );
+          
+          if (frenchPosters && frenchPosters.length > 0) {
+            // Prefer French posters, then null language (international), then highest rated
+            const bestFrenchPoster = frenchPosters.sort((a, b) => {
+              if (a.iso_639_1 === 'fr' && b.iso_639_1 !== 'fr') return -1;
+              if (b.iso_639_1 === 'fr' && a.iso_639_1 !== 'fr') return 1;
+              return b.vote_average - a.vote_average;
+            })[0];
+            
+            frenchPosterUrl = `https://image.tmdb.org/t/p/w500${bestFrenchPoster.file_path}`;
+          }
+        }
+      } catch (translationError) {
+        console.error('Error fetching French content:', translationError);
+      }
+
+      const posterUrl = movieResult.poster_path ? `https://image.tmdb.org/t/p/w500${movieResult.poster_path}` : null;
+      const backdropUrl = movieResult.backdrop_path ? `https://image.tmdb.org/t/p/w1280${movieResult.backdrop_path}` : null;
+      
+      res.json({ 
+        poster: posterUrl, // Original poster (English)
+        frenchPoster: frenchPosterUrl, // French poster
+        backdrop: backdropUrl,
+        title: movieResult.title, // Original title (English)
+        frenchTitle: frenchTitle, // French title
+        overview: movieResult.overview, // Original overview
+        frenchOverview: frenchOverview, // French overview
+        releaseDate: movieResult.release_date
+      });
+    } else {
+      res.json({ poster: null, frenchPoster: null, backdrop: null });
+    }
+  } catch (error) {
+    console.error('Error fetching poster:', error);
+    res.status(500).json({ error: 'Failed to fetch poster' });
+  }
+});
+
+// French to English movie title mapping
+const frenchToEnglishMapping = {
+  "avatar": "avatar",
+  "inception": "inception", 
+  "interstellar": "interstellar",
+  "matrix": "matrix",
+  "le seigneur des anneaux": "lord of the rings",
+  "star wars": "star wars",
+  "la guerre des étoiles": "star wars",
+  "retour vers le futur": "back to the future",
+  "pulp fiction": "pulp fiction",
+  "le parrain": "godfather",
+  "titanic": "titanic",
+  "jurassic park": "jurassic park",
+  "indiana jones": "indiana jones",
+  "harry potter": "harry potter",
+  "pirates des caraïbes": "pirates of the caribbean",
+  "shrek": "shrek",
+  "toy story": "toy story",
+  "le roi lion": "lion king",
+  "la reine des neiges": "frozen",
+  "fast and furious": "fast furious",
+  "rapides et dangereux": "fast furious",
+  "mission impossible": "mission impossible",
+  "james bond": "james bond",
+  "batman": "batman",
+  "superman": "superman",
+  "spider-man": "spider-man",
+  "l'homme araignée": "spider-man",
+  "iron man": "iron man",
+  "captain america": "captain america",
+  "thor": "thor",
+  "avengers": "avengers",
+  "x-men": "x-men",
+  "deadpool": "deadpool",
+  "wolverine": "wolverine"
+};
+
+// Function to map French titles to English
+const mapFrenchToEnglish = (title) => {
+  const normalizedTitle = title.toLowerCase()
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // Exact match
+  if (frenchToEnglishMapping[normalizedTitle]) {
+    return frenchToEnglishMapping[normalizedTitle];
+  }
+
+  // Partial match
+  for (const [french, english] of Object.entries(frenchToEnglishMapping)) {
+    if (normalizedTitle.includes(french) || french.includes(normalizedTitle)) {
+      return english;
+    }
+  }
+
+  return title;
+};
+
+// Function to generate search variants
+const generateSearchVariants = (title) => {
+  const variants = [title];
+  
+  // Add mapped version
+  const mappedTitle = mapFrenchToEnglish(title);
+  if (mappedTitle !== title) {
+    variants.push(mappedTitle);
+  }
+  
+  // Add versions without articles
+  const withoutArticles = title.replace(/^(le|la|les|un|une|des|l'|du|de la|des)\s+/i, '');
+  if (withoutArticles !== title) {
+    variants.push(withoutArticles);
+  }
+  
+  // Add versions without subtitles
+  const withoutSubtitle = title.split(/[:\-–—]/, 1)[0].trim();
+  if (withoutSubtitle !== title) {
+    variants.push(withoutSubtitle);
+  }
+  
+  return [...new Set(variants)]; // Remove duplicates
+};
+
+// Helper function to clean movie title for TMDB search
+const cleanMovieTitle = (filename) => {
+  return filename
+    .replace(/\.(mp4|mkv|avi|mov|webm)$/i, '') // Remove file extensions
+    .replace(/[\[\(].*?[\]\)]/g, '') // Remove content in brackets/parentheses
+    .replace(/\b(19|20)\d{2}\b/g, '') // Remove years
+    .replace(/\b(CAM|TS|TC|SCR|R5|DVDRip|BRRip|BluRay|1080p|720p|480p|HDTV|WEBRip|x264|x265|HEVC|AAC|AC3|DTS|IMAX)\b/gi, '') // Remove quality tags
+    .replace(/[._-]/g, ' ') // Replace dots, underscores, dashes with spaces
+    .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+    .replace(/^\s+|\s+$/g, '') // Trim whitespace
+    .trim();
 };
 
 // Search media

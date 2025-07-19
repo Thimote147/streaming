@@ -4,6 +4,7 @@ import Header from './components/Header';
 import Hero from './components/Hero';
 import MediaRow from './components/MediaRow';
 import VideoPlayer from './components/VideoPlayer';
+import MediaDetails from './components/MediaDetails';
 import { streamingAPI } from './services/api';
 import type { MediaItem, MediaCategory } from './services/api';
 
@@ -15,6 +16,7 @@ function App() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [selectedMedia, setSelectedMedia] = useState<MediaItem | null>(null);
   const [showPlayer, setShowPlayer] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [categoryLoading, setCategoryLoading] = useState(false);
 
@@ -82,8 +84,8 @@ function App() {
   };
 
   const handleMoreInfo = (media: MediaItem) => {
-    // TODO: Implement modal with more info
-    console.log('More info for:', media.title);
+    setSelectedMedia(media);
+    setShowDetails(true);
   };
 
   const handleAddToList = (media: MediaItem) => {
@@ -93,6 +95,11 @@ function App() {
 
   const handleClosePlayer = () => {
     setShowPlayer(false);
+    setSelectedMedia(null);
+  };
+
+  const handleCloseDetails = () => {
+    setShowDetails(false);
     setSelectedMedia(null);
   };
 
@@ -173,7 +180,7 @@ function App() {
               </div>
             </div>
           ) : (
-            <AnimatePresence mode="wait">
+            <AnimatePresence>
               {getDisplayedContent().map((category, index) => (
                 <motion.div
                   key={category.name}
@@ -219,6 +226,18 @@ function App() {
           isVisible={showPlayer}
         />
       )}
+
+      {/* Media Details */}
+      <AnimatePresence>
+        {showDetails && selectedMedia && (
+          <MediaDetails
+            media={selectedMedia}
+            onPlay={handlePlay}
+            onClose={handleCloseDetails}
+            onAddToList={handleAddToList}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

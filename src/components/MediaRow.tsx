@@ -105,12 +105,12 @@ const MediaRow: React.FC<MediaRowProps> = ({
           {/* Scrollable Content */}
           <div
             ref={scrollContainerRef}
-            className="flex space-x-4 overflow-x-auto scrollbar-hide px-4 md:px-8 pb-4 scroll-smooth"
+            className="flex space-x-2 overflow-x-auto scrollbar-hide px-4 md:px-8 pb-4 scroll-smooth"
             onScroll={checkScrollability}
             style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
           >
             {items.map((media, index) => (
-              <div key={media.id} className="flex-shrink-0 w-72 md:w-80">
+              <div key={media.id} className="flex-shrink-0 w-40 md:w-44">
                 <MediaCard
                   media={media}
                   onPlay={onPlay}
@@ -124,7 +124,7 @@ const MediaRow: React.FC<MediaRowProps> = ({
         </div>
       ) : (
         // Grid layout
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 px-4 md:px-8 pb-4">
+        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-2 px-4 md:px-8 pb-4">
           {items.map((media, index) => (
             <div key={media.id} className="w-full">
               <MediaCard

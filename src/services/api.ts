@@ -1,13 +1,18 @@
 export interface MediaItem {
   id: string;
   title: string;
+  frenchTitle?: string;
   path: string;
   type: 'movie' | 'series' | 'music';
   thumbnail?: string;
+  poster?: string;
+  frenchPoster?: string;
+  backdrop?: string;
   duration?: string;
   year?: number;
   genre?: string;
   description?: string;
+  frenchDescription?: string;
 }
 
 export interface MediaCategory {
@@ -18,6 +23,7 @@ export interface MediaCategory {
 
 class StreamingAPI {
   private baseUrl = '/api';
+  private posterCache = new Map<string, {poster: string | null, frenchPoster?: string, backdrop: string | null, frenchTitle?: string, frenchDescription?: string} | null>();
 
   async fetchCategories(): Promise<MediaCategory[]> {
     try {
@@ -60,6 +66,65 @@ class StreamingAPI {
 
   getStreamUrl(mediaPath: string): string {
     return `${this.baseUrl}/stream/${encodeURIComponent(mediaPath)}`;
+  }
+
+  async fetchMoviePoster(title: string, year?: number): Promise<string | null> {
+    const data = await this.fetchMovieData(title, year);
+    return data?.poster || null;
+  }
+
+  async fetchMovieBackdrop(title: string, year?: number): Promise<string | null> {
+    const data = await this.fetchMovieData(title, year);
+    return data?.backdrop || null;
+  }
+
+  async fetchMovieData(title: string, year?: number): Promise<{poster: string | null, frenchPoster?: string, backdrop: string | null, frenchTitle?: string, frenchDescription?: string} | null> {
+    try {
+      const cleanTitle = this.cleanMovieTitle(title);
+      const cacheKey = `${cleanTitle}_${year || 'unknown'}`;
+      
+      // Check cache first
+      if (this.posterCache.has(cacheKey)) {
+        return this.posterCache.get(cacheKey) || null;
+      }
+      
+      const yearParam = year ? `?year=${year}` : '';
+      const url = `${this.baseUrl}/poster/${encodeURIComponent(cleanTitle)}${yearParam}`;
+      
+      const response = await fetch(url);
+      if (!response.ok) {
+        this.posterCache.set(cacheKey, null);
+        return null;
+      }
+      
+      const data = await response.json();
+      const movieData = {
+        poster: data.poster || null,
+        frenchPoster: data.frenchPoster || null,
+        backdrop: data.backdrop || null,
+        frenchTitle: data.frenchTitle || null,
+        frenchDescription: data.frenchOverview || null
+      };
+      
+      // Cache the result
+      this.posterCache.set(cacheKey, movieData);
+      
+      return movieData;
+    } catch (error) {
+      console.error('Error fetching movie data:', error);
+      return null;
+    }
+  }
+
+  cleanMovieTitle(filename: string): string {
+    return filename
+      .replace(/\.(mp4|mkv|avi|mov|webm)$/i, '') // Remove file extensions
+      .replace(/[\[\(].*?[\]\)]/g, '') // Remove content in brackets/parentheses
+      .replace(/\b(19|20)\d{2}\b/g, '') // Remove years
+      .replace(/\b(CAM|TS|TC|SCR|R5|DVDRip|BRRip|BluRay|1080p|720p|480p|HDTV|WEBRip|x264|x265|HEVC|AAC|AC3|DTS|IMAX)\b/gi, '') // Remove quality tags
+      .replace(/[._-]/g, ' ') // Replace dots, underscores, dashes with spaces
+      .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+      .trim();
   }
 
   private getMockData(): MediaCategory[] {
