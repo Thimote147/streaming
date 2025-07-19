@@ -91,6 +91,8 @@ jobs:
           
           echo "🐳 Building and starting container..."
           export TMDB_API_KEY="${{ secrets.TMDB_API_KEY }}"
+          export VITE_SUPABASE_URL="${{ secrets.VITE_SUPABASE_URL }}"
+          export VITE_SUPABASE_ANON_KEY="${{ secrets.VITE_SUPABASE_ANON_KEY }}"
           docker-compose build --no-cache
           docker-compose up -d
           

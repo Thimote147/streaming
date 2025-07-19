@@ -17,13 +17,13 @@ export interface MediaItem {
 
 export interface MediaCategory {
   name: string;
-  type: 'Films' | 'Séries' | 'Musiques';
+  type: 'Films' | 'Series' | 'Musiques';
   items: MediaItem[];
 }
 
 class StreamingAPI {
   private baseUrl = '/api';
-  private posterCache = new Map<string, {poster: string | null, frenchPoster?: string, backdrop: string | null, frenchTitle?: string, frenchDescription?: string} | null>();
+  private posterCache = new Map<string, {poster: string | null, frenchPoster?: string, backdrop: string | null, frenchTitle?: string, frenchDescription?: string, releaseDate?: string, releaseYear?: number, genres?: number[], voteAverage?: number, voteCount?: number} | null>();
 
   async fetchCategories(): Promise<MediaCategory[]> {
     try {
@@ -40,7 +40,7 @@ class StreamingAPI {
 
   async fetchCategoryContent(categoryType: string): Promise<MediaItem[]> {
     try {
-      const response = await fetch(`${this.baseUrl}/category/${categoryType}`);
+      const response = await fetch(`${this.baseUrl}/${categoryType}`);
       if (!response.ok) {
         throw new Error(`Failed to fetch ${categoryType} content`);
       }
@@ -78,7 +78,7 @@ class StreamingAPI {
     return data?.backdrop || null;
   }
 
-  async fetchMovieData(title: string, year?: number): Promise<{poster: string | null, frenchPoster?: string, backdrop: string | null, frenchTitle?: string, frenchDescription?: string} | null> {
+  async fetchMovieData(title: string, year?: number): Promise<{poster: string | null, frenchPoster?: string, backdrop: string | null, frenchTitle?: string, frenchDescription?: string, releaseDate?: string, releaseYear?: number, genres?: number[], voteAverage?: number, voteCount?: number} | null> {
     try {
       const cleanTitle = this.cleanMovieTitle(title);
       const cacheKey = `${cleanTitle}_${year || 'unknown'}`;
@@ -103,7 +103,12 @@ class StreamingAPI {
         frenchPoster: data.frenchPoster || null,
         backdrop: data.backdrop || null,
         frenchTitle: data.frenchTitle || null,
-        frenchDescription: data.frenchOverview || null
+        frenchDescription: data.frenchOverview || null,
+        releaseDate: data.releaseDate || null,
+        releaseYear: data.releaseYear || null,
+        genres: data.genres || [],
+        voteAverage: data.voteAverage || null,
+        voteCount: data.voteCount || null
       };
       
       // Cache the result
@@ -135,9 +140,9 @@ class StreamingAPI {
         items: this.getMockDataForCategory('Films')
       },
       {
-        name: 'Séries',
-        type: 'Séries',
-        items: this.getMockDataForCategory('Séries')
+        name: 'Series',
+        type: 'Series',
+        items: this.getMockDataForCategory('Series')
       },
       {
         name: 'Musiques',
@@ -169,11 +174,11 @@ class StreamingAPI {
           description: 'Une comédie hilarante'
         }
       ],
-      'Séries': [
+      'Series': [
         {
           id: '3',
           title: 'Drama Series',
-          path: '/Séries/drama_series_s01e01.mp4',
+          path: '/Series/drama_series_s01e01.mp4',
           type: 'series',
           year: 2023,
           genre: 'Drama',

@@ -11,4 +11,6 @@ services:
       - MEDIA_PATH=/app/media
       - USE_LOCAL_FILES=true
       - TMDB_API_KEY=${TMDB_API_KEY}
+      - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+      - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
     restart: unless-stopped

@@ -35,12 +35,12 @@ export class SSHMediaService {
         .filter(line => line.startsWith('d'))
         .map(line => line.split(/\s+/).pop())
         .filter((dir): dir is string => dir !== undefined && !dir.startsWith('.'))
-        .filter(dir => ['Films', 'Séries', 'Musiques'].includes(dir));
+        .filter(dir => ['Films', 'Series', 'Musiques'].includes(dir));
       
       return directories;
     } catch (error) {
       console.error('Error listing directories:', error);
-      return ['Films', 'Séries', 'Musiques'];
+      return ['Films', 'Series', 'Musiques'];
     }
   }
 
@@ -83,7 +83,7 @@ export class SSHMediaService {
     switch (category) {
       case 'Films':
         return 'movie';
-      case 'Séries':
+      case 'Series':
         return 'series';
       case 'Musiques':
         return 'music';

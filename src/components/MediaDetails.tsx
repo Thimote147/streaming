@@ -17,12 +17,13 @@ const MediaDetails: React.FC<MediaDetailsProps> = ({
   onClose, 
   onAddToList 
 }) => {
-  const { poster, frenchPoster, backdrop, frenchTitle, frenchDescription } = useMovieData(media.title, media.year, media.type);
+  const { poster, frenchPoster, backdrop, frenchTitle, frenchDescription, releaseYear } = useMovieData(media.title, media.year, media.type);
   
   // Use French title, poster and description if available
   const displayTitle = frenchTitle || media.title;
   const displayPoster = frenchPoster || poster;
   const displayDescription = frenchDescription || media.description;
+  const displayYear = releaseYear || media.year;
 
   return (
     <motion.div
@@ -115,10 +116,10 @@ const MediaDetails: React.FC<MediaDetailsProps> = ({
                   
                   {/* Meta Info */}
                   <div className="flex flex-wrap items-center gap-4 mb-6">
-                    {media.year && (
+                    {displayYear && (
                       <div className="flex items-center space-x-1 text-gray-300">
                         <Calendar size={16} />
-                        <span>{media.year}</span>
+                        <span>{displayYear}</span>
                       </div>
                     )}
                     
@@ -180,10 +181,10 @@ const MediaDetails: React.FC<MediaDetailsProps> = ({
                         <span className="text-gray-400">Type : </span>
                         <span className="text-white capitalize">{media.type === 'movie' ? 'Film' : media.type === 'series' ? 'Série' : 'Musique'}</span>
                       </div>
-                      {media.year && (
+                      {displayYear && (
                         <div>
                           <span className="text-gray-400">Année : </span>
-                          <span className="text-white">{media.year}</span>
+                          <span className="text-white">{displayYear}</span>
                         </div>
                       )}
                       {media.genre && (

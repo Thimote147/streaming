@@ -66,6 +66,6 @@ npm run dev
 ```
 /mnt/streaming/
 ├── Films/
-├── Séries/
+├── Series/
 └── Musiques/
 ```

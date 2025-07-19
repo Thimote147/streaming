@@ -21,11 +21,13 @@ const MediaCard: React.FC<MediaCardProps> = ({
 }) => {
   const [isHovered, setIsHovered] = React.useState(false);
   const [imageError, setImageError] = React.useState(false);
-  const { poster, frenchPoster, frenchTitle, loading } = useMovieData(media.title, media.year, media.type);
+  const { poster, frenchPoster, frenchTitle, releaseYear, loading } = useMovieData(media.title, media.year, media.type);
   
   // Use French title and poster if available, otherwise use original
   const displayTitle = frenchTitle || media.title;
   const displayPoster = frenchPoster || poster;
+  // Use TMDB release year as primary source, fallback to file year
+  const displayYear = releaseYear || media.year;
 
   const getPlaceholderImage = () => {
     const colors = ['bg-red-900', 'bg-blue-900', 'bg-green-900', 'bg-purple-900', 'bg-yellow-900'];
@@ -145,7 +147,7 @@ const MediaCard: React.FC<MediaCardProps> = ({
         </h3>
         
         <div className="flex items-center space-x-2 text-xs text-gray-400 mb-2">
-          {media.year && <span>{media.year}</span>}
+          {displayYear && <span>{displayYear}</span>}
           {media.genre && (
             <>
               <span>•</span>

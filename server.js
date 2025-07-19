@@ -72,7 +72,7 @@ app.get('/api/categories', async (_req, res) => {
         directories = items.filter(item => {
           const itemPath = path.join(MEDIA_PATH, item);
           return fs.statSync(itemPath).isDirectory() && 
-                 ['Films', 'Séries', 'Musiques'].includes(item);
+                 ['Films', 'Series', 'Musiques'].includes(item);
         });
       }
     } else {
@@ -85,7 +85,7 @@ app.get('/api/categories', async (_req, res) => {
         .filter(line => line.startsWith('d'))
         .map(line => line.split(/\s+/).pop())
         .filter(dir => dir && !dir.startsWith('.'))
-        .filter(dir => ['Films', 'Séries', 'Musiques'].includes(dir));
+        .filter(dir => ['Films', 'Series', 'Musiques'].includes(dir));
     }
     
     const categories = await Promise.all(
@@ -120,13 +120,13 @@ app.get('/api/categories', async (_req, res) => {
         ]
       },
       {
-        name: 'Séries',
-        type: 'Séries',
+        name: 'Series',
+        type: 'Series',
         items: [
           {
             id: '2',
             title: 'Drama Series',
-            path: '/Séries/drama_series_s01e01.mp4',
+            path: '/Series/drama_series_s01e01.mp4',
             type: 'series',
             year: 2023,
             genre: 'Drama',
@@ -154,7 +154,7 @@ app.get('/api/categories', async (_req, res) => {
 });
 
 // Get content for a specific category
-app.get('/api/category/:type', async (req, res) => {
+app.get('/api/:type', async (req, res) => {
   try {
     const { type } = req.params;
     const items = await getCategoryItems(type);
@@ -260,7 +260,7 @@ app.get('/api/poster/:title', async (req, res) => {
     }
     
     const originalTitle = decodeURIComponent(title);
-    console.log('🔍 Searching for movie:', originalTitle, 'year:', year);
+    console.log('🔍 Searching for movie:', originalTitle);
     const searchVariants = generateSearchVariants(originalTitle);
     
     let movieResult = null;
@@ -352,7 +352,14 @@ app.get('/api/poster/:title', async (req, res) => {
         frenchTitle: frenchTitle, // French title
         overview: movieResult.overview, // Original overview
         frenchOverview: frenchOverview, // French overview
-        releaseDate: movieResult.release_date
+        releaseDate: movieResult.release_date, // Format YYYY-MM-DD
+        releaseYear: movieResult.release_date ? new Date(movieResult.release_date).getFullYear() : null,
+        genres: movieResult.genre_ids || [],
+        voteAverage: movieResult.vote_average,
+        voteCount: movieResult.vote_count,
+        adult: movieResult.adult,
+        popularity: movieResult.popularity,
+        tmdbId: movieResult.id
       });
     } else {
       res.json({ poster: null, frenchPoster: null, backdrop: null });
@@ -593,7 +600,7 @@ const getMediaType = (category) => {
   switch (category) {
     case 'Films':
       return 'movie';
-    case 'Séries':
+    case 'Series':
       return 'series';
     case 'Musiques':
       return 'music';

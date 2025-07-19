@@ -1,15 +1,18 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, SkipBack, SkipForward, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { MediaItem } from '../services/api';
+import { useWatchProgress } from '../hooks/useWatchProgress';
+import { useAuth } from '../hooks/useAuth';
 
 interface VideoPlayerProps {
   media: MediaItem;
   onClose: () => void;
   isVisible: boolean;
+  startTime?: number; // Position de départ en secondes
 }
 
-const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible }) => {
+const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible, startTime = 0 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -22,6 +25,65 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible }) 
   const [isLoading, setIsLoading] = useState(true);
 
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Hooks pour le suivi de progression
+  const { saveProgress, addToHistory, markAsCompleted, getProgressForMovie } = useWatchProgress();
+  const { user } = useAuth();
+  
+  // États pour le suivi de progression
+  const [sessionStart] = useState(new Date());
+  const [lastSavedTime, setLastSavedTime] = useState(0);
+  const [hasStarted, setHasStarted] = useState(false);
+
+  // Sauvegarder la progression
+  const saveProgressCallback = useCallback(async () => {
+    if (!videoRef.current || !user || !hasStarted) return;
+
+    const current = videoRef.current.currentTime;
+    const totalDuration = videoRef.current.duration;
+
+    // Éviter de sauvegarder trop souvent
+    if (Math.abs(current - lastSavedTime) < 10) return;
+
+    await saveProgress(media.path, media.title, current, totalDuration);
+    setLastSavedTime(current);
+  }, [media.path, media.title, saveProgress, user, hasStarted, lastSavedTime]);
+
+  // Gérer la fin du visionnage
+  const handleVideoEnd = useCallback(async () => {
+    if (!videoRef.current || !user) return;
+
+    const totalDuration = videoRef.current.duration;
+    const sessionEnd = new Date();
+    const sessionDuration = (sessionEnd.getTime() - sessionStart.getTime()) / 1000;
+
+    await markAsCompleted(media.path, media.title, totalDuration);
+    await addToHistory(media.path, media.title, sessionDuration, totalDuration, sessionStart, sessionEnd);
+  }, [media.path, media.title, markAsCompleted, addToHistory, sessionStart, user]);
+
+  // Charger la progression sauvegardée
+  useEffect(() => {
+    const loadSavedProgress = async () => {
+      if (!user || !videoRef.current) return;
+
+      try {
+        const progress = await getProgressForMovie(media.path);
+        if (progress && progress.current_position > 30) { // Reprendre seulement si > 30 secondes
+          videoRef.current.currentTime = startTime || progress.current_position;
+          setLastSavedTime(startTime || progress.current_position);
+        } else if (startTime) {
+          videoRef.current.currentTime = startTime;
+          setLastSavedTime(startTime);
+        }
+      } catch (error) {
+        console.error('Error loading saved progress:', error);
+      }
+    };
+
+    if (duration > 0) {
+      loadSavedProgress();
+    }
+  }, [media.path, startTime, getProgressForMovie, user, duration]);
 
   useEffect(() => {
     if (videoRef.current) {
@@ -42,9 +104,15 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible }) 
       
       const handleTimeUpdate = () => {
         setCurrentTime(video.currentTime);
+        if (video.currentTime > 0) {
+          setHasStarted(true);
+        }
       };
       
-      const handlePlay = () => setIsPlaying(true);
+      const handlePlay = () => {
+        setIsPlaying(true);
+        setHasStarted(true);
+      };
       const handlePause = () => setIsPlaying(false);
       const handleVolumeChange = () => {
         setVolume(video.volume);
@@ -64,6 +132,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible }) 
       video.addEventListener('pause', handlePause);
       video.addEventListener('volumechange', handleVolumeChange);
       video.addEventListener('error', handleError);
+      video.addEventListener('ended', handleVideoEnd);
 
       return () => {
         video.removeEventListener('loadedmetadata', handleLoadedMetadata);
@@ -74,9 +143,41 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible }) 
         video.removeEventListener('pause', handlePause);
         video.removeEventListener('volumechange', handleVolumeChange);
         video.removeEventListener('error', handleError);
+        video.removeEventListener('ended', handleVideoEnd);
       };
     }
-  }, [media.path]);
+  }, [media.path, handleVideoEnd]);
+
+  // Configuration des intervalles de sauvegarde
+  useEffect(() => {
+    if (!user) return;
+
+    const progressInterval = setInterval(saveProgressCallback, 30000); // Toutes les 30 secondes
+    const quickSaveInterval = setInterval(() => {
+      if (videoRef.current && !videoRef.current.paused && hasStarted) {
+        saveProgressCallback();
+      }
+    }, 10000); // Sauvegarde rapide toutes les 10 secondes
+
+    const handleVisibilityChange = () => {
+      if (document.hidden && videoRef.current && hasStarted) {
+        saveProgressCallback();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(progressInterval);
+      clearInterval(quickSaveInterval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      
+      // Sauvegarde finale avant le démontage
+      if (videoRef.current && hasStarted && videoRef.current.currentTime > 0) {
+        saveProgressCallback();
+      }
+    };
+  }, [saveProgressCallback, user, hasStarted]);
 
   const togglePlay = () => {
     if (videoRef.current) {
