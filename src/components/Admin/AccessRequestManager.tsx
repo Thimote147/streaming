@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { CheckCircle, XCircle, Clock, User, Mail, MessageSquare } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
@@ -10,11 +10,7 @@ const AccessRequestManager: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [processingIds, setProcessingIds] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
-    loadRequests();
-  }, []);
-
-  const loadRequests = async () => {
+  const loadRequests = useCallback(async () => {
     try {
       setLoading(true);
       const data = await getAccessRequests();
@@ -24,7 +20,11 @@ const AccessRequestManager: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [getAccessRequests]);
+
+  useEffect(() => {
+    loadRequests();
+  }, [loadRequests]);
 
   const handleUpdateRequest = async (requestId: string, status: 'approved' | 'rejected') => {
     if (!profile || profile.role !== 'admin') return;

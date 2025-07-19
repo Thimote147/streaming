@@ -3,10 +3,10 @@ import { motion } from 'framer-motion';
 import { Clock, Calendar, TrendingUp, Filter } from 'lucide-react';
 import { useWatchProgress } from '../../hooks/useWatchProgress';
 import { useMovieData } from '../../hooks/useMovieData';
-// import type { WatchHistory } from '../../lib/supabase';
+import type { WatchHistory } from '../../lib/supabase';
 
 interface HistoryEntryProps {
-  entry: any; // Type from WatchHistory
+  entry: WatchHistory;
 }
 
 const HistoryEntry: React.FC<HistoryEntryProps> = ({ entry }) => {
@@ -170,7 +170,7 @@ const WatchHistoryView: React.FC = () => {
           <Filter size={20} className="text-gray-400" />
           <select
             value={filter}
-            onChange={(e) => setFilter(e.target.value as any)}
+            onChange={(e) => setFilter(e.target.value as 'all' | 'completed' | 'partial')}
             className="bg-gray-800 border border-gray-600 rounded px-3 py-1 text-white text-sm focus:outline-none focus:border-red-500"
           >
             <option value="all">Tous</option>

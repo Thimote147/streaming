@@ -86,29 +86,19 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible, st
   }, [media.path, startTime, getProgressForMovie, user, duration]);
 
   useEffect(() => {
-    if (videoRef.current) {
-      const video = videoRef.current;
-      
+    const video = videoRef.current; // Save ref to local variable
+
+    if (video) {
       const handleLoadedMetadata = () => {
         setDuration(video.duration);
         setIsLoading(false);
       };
-      
-      const handleLoadedData = () => {
-        setIsLoading(false);
-      };
-      
-      const handleCanPlay = () => {
-        setIsLoading(false);
-      };
-      
+      const handleLoadedData = () => setIsLoading(false);
+      const handleCanPlay = () => setIsLoading(false);
       const handleTimeUpdate = () => {
         setCurrentTime(video.currentTime);
-        if (video.currentTime > 0) {
-          setHasStarted(true);
-        }
+        if (video.currentTime > 0) setHasStarted(true);
       };
-      
       const handlePlay = () => {
         setIsPlaying(true);
         setHasStarted(true);
@@ -118,7 +108,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible, st
         setVolume(video.volume);
         setIsMuted(video.muted);
       };
-
       const handleError = () => {
         console.error('Video playback error');
         setIsLoading(false);
@@ -135,6 +124,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible, st
       video.addEventListener('ended', handleVideoEnd);
 
       return () => {
+        // Use the same local variable for cleanup
         video.removeEventListener('loadedmetadata', handleLoadedMetadata);
         video.removeEventListener('loadeddata', handleLoadedData);
         video.removeEventListener('canplay', handleCanPlay);
@@ -150,11 +140,12 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible, st
 
   // Configuration des intervalles de sauvegarde
   useEffect(() => {
+    const video = videoRef.current;
     if (!user) return;
 
     const progressInterval = setInterval(saveProgressCallback, 30000); // Toutes les 30 secondes
     const quickSaveInterval = setInterval(() => {
-      if (videoRef.current && !videoRef.current.paused && hasStarted) {
+      if (video && !video.paused && hasStarted) {
         saveProgressCallback();
       }
     }, 10000); // Sauvegarde rapide toutes les 10 secondes
@@ -173,7 +164,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible, st
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       
       // Sauvegarde finale avant le démontage
-      if (videoRef.current && hasStarted && videoRef.current.currentTime > 0) {
+      if (video && hasStarted && video.currentTime > 0) {
         saveProgressCallback();
       }
     };

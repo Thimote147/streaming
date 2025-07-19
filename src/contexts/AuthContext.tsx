@@ -104,7 +104,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .eq('id', userId)
         .single();
 
-      const { data, error } = await Promise.race([supabasePromise, timeoutPromise]) as any;
+      const { data, error } = await Promise.race([
+        supabasePromise,
+        timeoutPromise,
+      ]) as { data: Profile | null; error: Error | null };
 
       if (error) {
         // Si timeout, on réessaie une fois en arrière-plan
