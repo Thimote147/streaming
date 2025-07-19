@@ -13,6 +13,14 @@ export interface MediaItem {
   genre?: string;
   description?: string;
   frenchDescription?: string;
+  // Grouping fields
+  isGroup?: boolean;
+  episodeCount?: number;
+  episodes?: MediaItem[];
+  seasonNumber?: number;
+  episodeNumber?: number;
+  seriesTitle?: string;
+  sequelNumber?: number;
 }
 
 export interface MediaCategory {
@@ -68,28 +76,31 @@ class StreamingAPI {
     return `${this.baseUrl}/stream/${encodeURIComponent(mediaPath)}`;
   }
 
-  async fetchMoviePoster(title: string, year?: number): Promise<string | null> {
-    const data = await this.fetchMovieData(title, year);
+  async fetchMoviePoster(title: string, year?: number, type?: string): Promise<string | null> {
+    const data = await this.fetchMovieData(title, year, type);
     return data?.poster || null;
   }
 
-  async fetchMovieBackdrop(title: string, year?: number): Promise<string | null> {
-    const data = await this.fetchMovieData(title, year);
+  async fetchMovieBackdrop(title: string, year?: number, type?: string): Promise<string | null> {
+    const data = await this.fetchMovieData(title, year, type);
     return data?.backdrop || null;
   }
 
-  async fetchMovieData(title: string, year?: number): Promise<{poster: string | null, frenchPoster?: string, backdrop: string | null, frenchTitle?: string, frenchDescription?: string, releaseDate?: string, releaseYear?: number, genres?: number[], voteAverage?: number, voteCount?: number} | null> {
+  async fetchMovieData(title: string, year?: number, type?: string): Promise<{poster: string | null, frenchPoster?: string, backdrop: string | null, frenchTitle?: string, frenchDescription?: string, releaseDate?: string, releaseYear?: number, genres?: number[], voteAverage?: number, voteCount?: number} | null> {
     try {
       const cleanTitle = this.cleanMovieTitle(title);
-      const cacheKey = `${cleanTitle}_${year || 'unknown'}`;
+      const cacheKey = `${cleanTitle}_${year || 'unknown'}_${type || 'movie'}`;
       
       // Check cache first
       if (this.posterCache.has(cacheKey)) {
         return this.posterCache.get(cacheKey) || null;
       }
       
-      const yearParam = year ? `?year=${year}` : '';
-      const url = `${this.baseUrl}/poster/${encodeURIComponent(cleanTitle)}${yearParam}`;
+      const params = new URLSearchParams();
+      if (year) params.append('year', year.toString());
+      if (type) params.append('type', type);
+      const queryString = params.toString();
+      const url = `${this.baseUrl}/poster/${encodeURIComponent(cleanTitle)}${queryString ? `?${queryString}` : ''}`;
       
       const response = await fetch(url);
       if (!response.ok) {
@@ -124,6 +135,7 @@ class StreamingAPI {
   cleanMovieTitle(filename: string): string {
     return filename
       .replace(/\.(mp4|mkv|avi|mov|webm)$/i, '') // Remove file extensions
+      .replace(/\b[Ss]\d{1,2}[Ee]\d{1,2}\b/g, '') // Remove season/episode patterns (S01E01, s1e1, etc.)
       .replace(/[[(].*?[\])]/g, '') // Remove content in brackets/parentheses
       .replace(/\b(19|20)\d{2}\b/g, '') // Remove years
       .replace(/\b(CAM|TS|TC|SCR|R5|DVDRip|BRRip|BluRay|1080p|720p|480p|HDTV|WEBRip|x264|x265|HEVC|AAC|AC3|DTS|IMAX)\b/gi, '') // Remove quality tags

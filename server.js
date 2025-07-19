@@ -157,7 +157,9 @@ app.get('/api/categories', async (_req, res) => {
 app.get('/api/:type', async (req, res) => {
   try {
     const { type } = req.params;
+    console.log(`📡 API request for category: ${type}`);
     const items = await getCategoryItems(type);
+    console.log(`📦 Returning ${items.length} items`);
     res.json(items);
   } catch (error) {
     console.error(`Error fetching ${req.params.type} content:`, error);
@@ -167,12 +169,19 @@ app.get('/api/:type', async (req, res) => {
 
 // Helper function to get items for a category
 const getCategoryItems = async (category) => {
+  console.log(`🔍 getCategoryItems called with category: ${category}`);
   try {
     let files = [];
     
     if (USE_LOCAL_FILES) {
-      // Use local filesystem
-      const categoryPath = path.join(MEDIA_PATH, category);
+      // Use local filesystem - try both lowercase and capitalized
+      let categoryPath = path.join(MEDIA_PATH, category);
+      
+      // If the lowercase version doesn't exist, try capitalized
+      if (!fs.existsSync(categoryPath)) {
+        const capitalizedCategory = category.charAt(0).toUpperCase() + category.slice(1);
+        categoryPath = path.join(MEDIA_PATH, capitalizedCategory);
+      }
       
       if (fs.existsSync(categoryPath)) {
         const getAllFiles = (dir, fileList = []) => {
@@ -209,6 +218,7 @@ const getCategoryItems = async (category) => {
       return {
         id: `${category.toLowerCase()}_${index}`,
         title: formatTitle(fileNameWithoutExt),
+        originalFileName: fileNameWithoutExt, // Keep original for pattern matching
         path: webPath,
         type: getMediaType(category),
         genre: extractGenre(fileName),
@@ -217,19 +227,8 @@ const getCategoryItems = async (category) => {
       };
     });
     
-    return mediaItems.sort((a, b) => {
-      // Normalize titles for proper alphabetical sorting
-      const normalizeTitle = (title) => title
-        .toLowerCase()
-        .replace(/^(the|le|la|les|un|une|des|\[.*?\])\s+/i, '') // Remove articles and brackets
-        .replace(/[^\w\s]/g, '') // Remove special characters
-        .trim();
-      
-      const titleA = normalizeTitle(a.title);
-      const titleB = normalizeTitle(b.title);
-      
-      return titleA.localeCompare(titleB, 'fr', { sensitivity: 'base' });
-    });
+    // Group media items by series/sequels
+    return groupMediaItems(mediaItems, category);
   } catch (error) {
     console.error(`Error getting ${category} items:`, error);
     return [];
@@ -247,11 +246,11 @@ app.get('/api/test-tmdb', (_req, res) => {
   });
 });
 
-// Get movie poster from TMDB with multiple search strategies
+// Get movie/TV show poster from TMDB with multiple search strategies
 app.get('/api/poster/:title', async (req, res) => {
   try {
     const { title } = req.params;
-    const { year } = req.query;
+    const { year, type } = req.query;
     
     if (!TMDB_API_KEY) {
       console.error('❌ TMDB API key not found in environment variables');
@@ -260,10 +259,11 @@ app.get('/api/poster/:title', async (req, res) => {
     }
     
     const originalTitle = decodeURIComponent(title);
-    console.log('🔍 Searching for movie:', originalTitle);
+    const mediaType = type === 'series' ? 'tv' : 'movie';
+    console.log(`🔍 Searching for ${mediaType}:`, originalTitle);
     const searchVariants = generateSearchVariants(originalTitle);
     
-    let movieResult = null;
+    let mediaResult = null;
     
     // Try each variant until we find a result
     for (const variant of searchVariants) {
@@ -273,8 +273,8 @@ app.get('/api/poster/:title', async (req, res) => {
       
       // Try both English and French searches
       const searches = [
-        `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}&query=${searchQuery}${yearParam}&language=en-US`,
-        `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}&query=${searchQuery}${yearParam}&language=fr-FR`
+        `https://api.themoviedb.org/3/search/${mediaType}?api_key=${TMDB_API_KEY}&query=${searchQuery}${yearParam}&language=en-US`,
+        `https://api.themoviedb.org/3/search/${mediaType}?api_key=${TMDB_API_KEY}&query=${searchQuery}${yearParam}&language=fr-FR`
       ];
       
       for (const url of searches) {
@@ -283,7 +283,7 @@ app.get('/api/poster/:title', async (req, res) => {
           if (response.ok) {
             const data = await response.json();
             if (data.results && data.results.length > 0) {
-              movieResult = data.results[0];
+              mediaResult = data.results[0];
               break;
             }
           }
@@ -292,23 +292,24 @@ app.get('/api/poster/:title', async (req, res) => {
         }
       }
       
-      if (movieResult) break;
+      if (mediaResult) break;
     }
     
-    if (movieResult) {
+    if (mediaResult) {
       // Get French translation and French posters if available
-      let frenchTitle = movieResult.title;
-      let frenchOverview = movieResult.overview;
-      let frenchPosterUrl = movieResult.poster_path ? `https://image.tmdb.org/t/p/w500${movieResult.poster_path}` : null;
+      const titleField = mediaType === 'tv' ? 'name' : 'title';
+      let frenchTitle = mediaResult[titleField];
+      let frenchOverview = mediaResult.overview;
+      let frenchPosterUrl = mediaResult.poster_path ? `https://image.tmdb.org/t/p/w500${mediaResult.poster_path}` : null;
       
       try {
-        // Get French movie details
-        const detailsUrl = `https://api.themoviedb.org/3/movie/${movieResult.id}?api_key=${TMDB_API_KEY}&language=fr-FR`;
+        // Get French details
+        const detailsUrl = `https://api.themoviedb.org/3/${mediaType}/${mediaResult.id}?api_key=${TMDB_API_KEY}&language=fr-FR`;
         const detailsResponse = await fetch(detailsUrl);
         if (detailsResponse.ok) {
           const frenchData = await detailsResponse.json();
-          if (frenchData.title && frenchData.title.trim()) {
-            frenchTitle = frenchData.title;
+          if (frenchData[titleField] && frenchData[titleField].trim()) {
+            frenchTitle = frenchData[titleField];
           }
           if (frenchData.overview && frenchData.overview.trim()) {
             frenchOverview = frenchData.overview;
@@ -316,7 +317,7 @@ app.get('/api/poster/:title', async (req, res) => {
         }
 
         // Get French posters
-        const imagesUrl = `https://api.themoviedb.org/3/movie/${movieResult.id}/images?api_key=${TMDB_API_KEY}`;
+        const imagesUrl = `https://api.themoviedb.org/3/${mediaType}/${mediaResult.id}/images?api_key=${TMDB_API_KEY}`;
         const imagesResponse = await fetch(imagesUrl);
         if (imagesResponse.ok) {
           const imagesData = await imagesResponse.json();
@@ -341,25 +342,29 @@ app.get('/api/poster/:title', async (req, res) => {
         console.error('Error fetching French content:', translationError);
       }
 
-      const posterUrl = movieResult.poster_path ? `https://image.tmdb.org/t/p/w500${movieResult.poster_path}` : null;
-      const backdropUrl = movieResult.backdrop_path ? `https://image.tmdb.org/t/p/w1280${movieResult.backdrop_path}` : null;
+      const posterUrl = mediaResult.poster_path ? `https://image.tmdb.org/t/p/w500${mediaResult.poster_path}` : null;
+      const backdropUrl = mediaResult.backdrop_path ? `https://image.tmdb.org/t/p/w1280${mediaResult.backdrop_path}` : null;
+      
+      // Handle different date fields for movies vs TV shows
+      const releaseDate = mediaType === 'tv' ? mediaResult.first_air_date : mediaResult.release_date;
       
       res.json({ 
         poster: posterUrl, // Original poster (English)
         frenchPoster: frenchPosterUrl, // French poster
         backdrop: backdropUrl,
-        title: movieResult.title, // Original title (English)
+        title: mediaResult[titleField], // Original title (English)
         frenchTitle: frenchTitle, // French title
-        overview: movieResult.overview, // Original overview
+        overview: mediaResult.overview, // Original overview
         frenchOverview: frenchOverview, // French overview
-        releaseDate: movieResult.release_date, // Format YYYY-MM-DD
-        releaseYear: movieResult.release_date ? new Date(movieResult.release_date).getFullYear() : null,
-        genres: movieResult.genre_ids || [],
-        voteAverage: movieResult.vote_average,
-        voteCount: movieResult.vote_count,
-        adult: movieResult.adult,
-        popularity: movieResult.popularity,
-        tmdbId: movieResult.id
+        releaseDate: releaseDate, // Format YYYY-MM-DD
+        releaseYear: releaseDate ? new Date(releaseDate).getFullYear() : null,
+        genres: mediaResult.genre_ids || [],
+        voteAverage: mediaResult.vote_average,
+        voteCount: mediaResult.vote_count,
+        adult: mediaResult.adult,
+        popularity: mediaResult.popularity,
+        tmdbId: mediaResult.id,
+        mediaType: mediaType
       });
     } else {
       res.json({ poster: null, frenchPoster: null, backdrop: null });
@@ -597,12 +602,12 @@ const formatTitle = (filename) => {
 };
 
 const getMediaType = (category) => {
-  switch (category) {
-    case 'Films':
+  switch (category.toLowerCase()) {
+    case 'films':
       return 'movie';
-    case 'Series':
+    case 'series':
       return 'series';
-    case 'Musiques':
+    case 'musiques':
       return 'music';
     default:
       return 'movie';
@@ -625,6 +630,162 @@ const extractGenre = (filename) => {
   }
   
   return undefined;
+};
+
+// Extract series info from filename
+const extractSeriesInfo = (filename) => {
+  console.log('🔍 Extracting series info from:', filename);
+  // Pattern: SeriesName.S01E01.ext or SeriesName S01E01.ext
+  const match = filename.match(/^(.+?)[._\s]([Ss]\d{1,2}[Ee]\d{1,2})/);
+  if (match) {
+    const seriesName = match[1].replace(/[._-]/g, ' ').trim();
+    const episodeCode = match[2].toUpperCase();
+    const seasonMatch = episodeCode.match(/S(\d{1,2})/);
+    const episodeMatch = episodeCode.match(/E(\d{1,2})/);
+    
+    const result = {
+      seriesTitle: seriesName,
+      seasonNumber: seasonMatch ? parseInt(seasonMatch[1]) : 1,
+      episodeNumber: episodeMatch ? parseInt(episodeMatch[1]) : 1,
+      episodeCode
+    };
+    console.log('✅ Series info extracted:', result);
+    return result;
+  }
+  console.log('❌ No series pattern found in:', filename);
+  return null;
+};
+
+// Extract sequel info from movie filename
+const extractSequelInfo = (filename) => {
+  // Patterns: Movie 2, Movie II, Movie Part 2, etc.
+  const patterns = [
+    /^(.+?)\s+(\d+)(?:\s|$)/, // "Movie 2"
+    /^(.+?)\s+(II|III|IV|V|VI|VII|VIII|IX|X)(?:\s|$)/, // "Movie II"
+    /^(.+?)\s+Part\s+(\d+)(?:\s|$)/i, // "Movie Part 2"
+    /^(.+?)\s+Chapter\s+(\d+)(?:\s|$)/i // "Movie Chapter 2"
+  ];
+  
+  for (const pattern of patterns) {
+    const match = filename.match(pattern);
+    if (match) {
+      const title = match[1].trim();
+      let sequelNumber = match[2];
+      
+      // Convert Roman numerals to numbers
+      if (isNaN(sequelNumber)) {
+        const romanToNum = { 'II': 2, 'III': 3, 'IV': 4, 'V': 5, 'VI': 6, 'VII': 7, 'VIII': 8, 'IX': 9, 'X': 10 };
+        sequelNumber = romanToNum[sequelNumber] || 1;
+      }
+      
+      return {
+        baseTitle: title,
+        sequelNumber: parseInt(sequelNumber)
+      };
+    }
+  }
+  return null;
+};
+
+// Group media items by series or sequel
+const groupMediaItems = (mediaItems, category) => {
+  console.log(`🎬 Grouping ${mediaItems.length} items for category: ${category}`);
+  
+  // Normalize category name (both 'series'/'Series' and 'films'/'Films' should work)
+  const normalizedCategory = category.toLowerCase();
+  if (normalizedCategory !== 'series' && normalizedCategory !== 'films') {
+    return mediaItems;
+  }
+  
+  const groups = new Map();
+  const ungrouped = [];
+  
+  mediaItems.forEach(item => {
+    console.log(`🔄 Processing item: ${item.title}`);
+    if (normalizedCategory === 'series') {
+      const seriesInfo = extractSeriesInfo(item.originalFileName || item.title);
+      if (seriesInfo) {
+        const groupKey = seriesInfo.seriesTitle.toLowerCase();
+        if (!groups.has(groupKey)) {
+          groups.set(groupKey, {
+            ...item,
+            id: `series_${groupKey.replace(/\s+/g, '_')}`,
+            title: seriesInfo.seriesTitle,
+            seriesTitle: seriesInfo.seriesTitle,
+            isGroup: true,
+            episodes: [],
+            episodeCount: 0
+          });
+        }
+        
+        const group = groups.get(groupKey);
+        group.episodes.push({
+          ...item,
+          seasonNumber: seriesInfo.seasonNumber,
+          episodeNumber: seriesInfo.episodeNumber,
+          seriesTitle: seriesInfo.seriesTitle
+        });
+        group.episodeCount = group.episodes.length;
+      } else {
+        ungrouped.push(item);
+      }
+    } else if (normalizedCategory === 'films') {
+      const sequelInfo = extractSequelInfo(item.originalFileName || item.title);
+      if (sequelInfo) {
+        const groupKey = sequelInfo.baseTitle.toLowerCase();
+        if (!groups.has(groupKey)) {
+          groups.set(groupKey, {
+            ...item,
+            id: `sequel_${groupKey.replace(/\s+/g, '_')}`,
+            title: sequelInfo.baseTitle,
+            isGroup: true,
+            episodes: [],
+            episodeCount: 0
+          });
+        }
+        
+        const group = groups.get(groupKey);
+        group.episodes.push({
+          ...item,
+          sequelNumber: sequelInfo.sequelNumber
+        });
+        group.episodeCount = group.episodes.length;
+      } else {
+        ungrouped.push(item);
+      }
+    }
+  });
+  
+  // Sort episodes within groups
+  groups.forEach(group => {
+    if (normalizedCategory === 'series') {
+      group.episodes.sort((a, b) => {
+        if (a.seasonNumber !== b.seasonNumber) {
+          return a.seasonNumber - b.seasonNumber;
+        }
+        return a.episodeNumber - b.episodeNumber;
+      });
+    } else {
+      group.episodes.sort((a, b) => (a.sequelNumber || 1) - (b.sequelNumber || 1));
+    }
+  });
+  
+  // Combine grouped and ungrouped items
+  const result = [...Array.from(groups.values()), ...ungrouped];
+  
+  // Sort final result
+  return result.sort((a, b) => {
+    const normalizeTitle = (title) => title
+      .toLowerCase()
+      .replace(/^(the|le|la|les|un|une|des|\[.*?\])\s+/i, '')
+      .replace(/[^\w\s]/g, '')
+      .trim();
+    
+    const titleA = normalizeTitle(a.title);
+    const titleB = normalizeTitle(b.title);
+    
+    return titleA.localeCompare(titleB, 'fr', { sensitivity: 'base' });
+  });
 };
 
 // Serve React app for all other routes

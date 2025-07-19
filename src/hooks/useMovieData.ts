@@ -15,15 +15,15 @@ export const useMovieData = (title: string, year?: number, type?: string) => {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // Only fetch data for movies
-    if (type !== 'movie' || !title) {
+    // Only fetch data for movies and series
+    if ((type !== 'movie' && type !== 'series') || !title) {
       return;
     }
 
     const fetchMovieData = async () => {
       setLoading(true);
       try {
-        const movieData = await streamingAPI.fetchMovieData(title, year);
+        const movieData = await streamingAPI.fetchMovieData(title, year, type);
         setPoster(movieData?.poster || null);
         setFrenchPoster(movieData?.frenchPoster || null);
         setBackdrop(movieData?.backdrop || null);

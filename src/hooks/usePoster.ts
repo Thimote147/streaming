@@ -6,15 +6,15 @@ export const usePoster = (title: string, year?: number, type?: string) => {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // Only fetch posters for movies
-    if (type !== 'movie' || !title) {
+    // Only fetch posters for movies and series
+    if ((type !== 'movie' && type !== 'series') || !title) {
       return;
     }
 
     const fetchPoster = async () => {
       setLoading(true);
       try {
-        const posterUrl = await streamingAPI.fetchMoviePoster(title, year);
+        const posterUrl = await streamingAPI.fetchMoviePoster(title, year, type);
         setPoster(posterUrl);
       } catch (error) {
         console.error('Error fetching poster:', error);

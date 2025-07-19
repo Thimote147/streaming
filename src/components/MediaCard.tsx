@@ -28,6 +28,12 @@ const MediaCard: React.FC<MediaCardProps> = ({
   const displayPoster = frenchPoster || poster;
   // Use TMDB release year as primary source, fallback to file year
   const displayYear = releaseYear || media.year;
+  
+  // For groups, show episode count
+  const isGroup = media.isGroup && media.episodes && media.episodes.length > 0;
+  const episodeText = isGroup ? 
+    (media.type === 'series' ? `${media.episodeCount} épisodes` : `${media.episodeCount} films`) : 
+    null;
 
   const getPlaceholderImage = () => {
     const colors = ['bg-red-900', 'bg-blue-900', 'bg-green-900', 'bg-purple-900', 'bg-yellow-900'];
@@ -89,17 +95,36 @@ const MediaCard: React.FC<MediaCardProps> = ({
           animate={{ opacity: isHovered ? 1 : 0 }}
         >
           <div className="flex space-x-2">
-            <motion.button
-              onClick={(e) => {
-                e.stopPropagation();
-                onPlay(media);
-              }}
-              className="bg-white/90 text-black p-3 rounded-full hover:bg-white transition-colors shadow-lg"
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-            >
-              <Play size={20} fill="currentColor" />
-            </motion.button>
+            {!isGroup && (
+              <motion.button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onPlay(media);
+                }}
+                className="bg-white/90 text-black p-3 rounded-full hover:bg-white transition-colors shadow-lg"
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+              >
+                <Play size={20} fill="currentColor" />
+              </motion.button>
+            )}
+            {isGroup && (
+              <motion.button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // Play first episode/movie in the group
+                  const firstItem = media.episodes?.[0];
+                  if (firstItem) {
+                    onPlay(firstItem);
+                  }
+                }}
+                className="bg-white/90 text-black p-3 rounded-full hover:bg-white transition-colors shadow-lg"
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+              >
+                <Play size={20} fill="currentColor" />
+              </motion.button>
+            )}
             
             <motion.button
               onClick={(e) => {
@@ -148,6 +173,12 @@ const MediaCard: React.FC<MediaCardProps> = ({
         
         <div className="flex items-center space-x-2 text-xs text-gray-400 mb-2">
           {displayYear && <span>{displayYear}</span>}
+          {episodeText && (
+            <>
+              <span>•</span>
+              <span className="text-blue-400">{episodeText}</span>
+            </>
+          )}
           {media.genre && (
             <>
               <span>•</span>
@@ -155,7 +186,7 @@ const MediaCard: React.FC<MediaCardProps> = ({
             </>
           )}
           <span>•</span>
-          <span className="capitalize">{media.type}</span>
+          <span className="capitalize">{media.type === 'series' && isGroup ? 'Série' : media.type === 'movie' && isGroup ? 'Saga' : media.type}</span>
         </div>
         
       </div>
