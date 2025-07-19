@@ -168,6 +168,11 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible }) 
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         onMouseMove={handleMouseMove}
+        onClick={(e) => {
+          if (e.target === e.currentTarget) {
+            onClose();
+          }
+        }}
       >
         {/* Video Element */}
         <video
@@ -192,6 +197,30 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible }) 
           </div>
         )}
 
+        {/* Close Button - Show on hover or with controls */}
+        <AnimatePresence>
+          {showControls && (
+            <motion.div 
+              className="absolute top-4 right-4 z-10"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onClose();
+                }}
+                className="text-white hover:text-gray-300 hover:bg-white/10 p-3 rounded-full transition-all duration-200 backdrop-blur-sm bg-black/50"
+                aria-label="Fermer le lecteur vidéo"
+              >
+                <X size={24} />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Controls Overlay */}
         <AnimatePresence>
           {showControls && (
@@ -203,17 +232,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible }) 
               transition={{ duration: 0.3 }}
             >
               {/* Top Controls */}
-              <div className="absolute top-4 left-4 right-4 flex justify-between items-center">
+              <div className="absolute top-4 left-4 right-16 flex justify-between items-center">
                 <h2 className="text-white text-xl font-semibold">{media.title}</h2>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onClose();
-                  }}
-                  className="text-white hover:text-gray-300 p-2 transition-colors"
-                >
-                  <X size={24} />
-                </button>
               </div>
 
               {/* Center Play Button */}
