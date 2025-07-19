@@ -325,43 +325,51 @@ app.get('/api/stream/:path(*)', async (req, res) => {
           console.log('Serving converted MP4 file from cache');
           res.sendFile(convertedFilePath);
         } else {
-          // Start conversion and show progress
-          console.log(`Starting conversion of ${ext} file: ${localFilePath}`);
-          console.log(`Will save to cache: ${convertedFilePath}`);
+          // Stream with real-time transcoding (faster than full conversion)
+          console.log(`Streaming with transcoding: ${localFilePath}`);
           
-          res.setHeader('Content-Type', 'application/json');
-          res.json({
-            status: 'converting',
-            message: 'File is being converted to MP4. Please wait...',
-            originalFile: filePath,
-            estimatedTime: 'Few minutes'
+          res.setHeader('Content-Type', 'video/mp4');
+          res.setHeader('Accept-Ranges', 'bytes');
+          res.setHeader('Cache-Control', 'no-cache');
+          
+          // Ultra-fast streaming transcoding
+          const streamCommand = `ffmpeg -i "${localFilePath}" -c:v copy -c:a aac -preset ultrafast -threads 0 -movflags frag_keyframe+empty_moov -f mp4 -`;
+          console.log('Stream transcoding command:', streamCommand);
+          
+          const streamChild = exec(streamCommand, { timeout: 300000 });
+          
+          streamChild.stdout.on('data', (chunk) => {
+            res.write(chunk);
           });
           
-          // Start conversion in background
-          const convertCommand = `ffmpeg -i "${localFilePath}" -c:v copy -c:a aac -movflags +faststart "${convertedFilePath}"`;
-          console.log('Conversion command:', convertCommand);
-          
-          const conversionChild = exec(convertCommand, { timeout: 1800000 }); // 30 min timeout
-          
-          conversionChild.on('close', (code) => {
-            if (code === 0) {
-              console.log(`Conversion completed successfully: ${convertedFilePath}`);
-            } else {
-              console.error(`Conversion failed with code: ${code}`);
-              // Clean up failed conversion file
-              if (fs.existsSync(convertedFilePath)) {
-                fs.unlinkSync(convertedFilePath);
+          streamChild.stdout.on('end', () => {
+            res.end();
+            
+            // Start background conversion for next time
+            console.log('Starting background conversion for caching...');
+            const cacheCommand = `ffmpeg -i "${localFilePath}" -c:v copy -c:a aac -preset fast -threads 0 -movflags +faststart "${convertedFilePath}"`;
+            
+            const cacheChild = exec(cacheCommand, { timeout: 1800000 });
+            cacheChild.on('close', (code) => {
+              if (code === 0) {
+                console.log(`Background conversion completed: ${convertedFilePath}`);
+              } else {
+                console.error(`Background conversion failed with code: ${code}`);
               }
+            });
+          });
+          
+          streamChild.on('error', (error) => {
+            console.error('Stream transcode error:', error);
+            if (!res.headersSent) {
+              res.status(500).send('Stream error: ' + error.message);
             }
           });
           
-          conversionChild.stderr.on('data', (data) => {
+          streamChild.stderr.on('data', (data) => {
             const stderrText = data.toString();
-            if (stderrText.includes('time=')) {
-              console.log('Conversion progress:', stderrText.match(/time=\S+/)?.[0]);
-            }
             if (stderrText.includes('Error') || stderrText.includes('Invalid')) {
-              console.error('Conversion error:', stderrText);
+              console.error('Stream transcode error:', stderrText);
             }
           });
         }
