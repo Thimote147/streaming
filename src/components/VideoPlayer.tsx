@@ -280,6 +280,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible, st
           src={`/api/stream/${encodeURIComponent(media.path)}`}
           autoPlay
           preload="metadata"
+          playsInline
           onClick={(e) => {
             e.stopPropagation();
             togglePlay();
@@ -332,7 +333,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible, st
             >
               {/* Top Controls */}
               <div className="absolute top-4 left-4 right-16 flex justify-between items-center">
-                <h2 className="text-white text-xl font-semibold">{media.title}</h2>
+                <h2 className="text-white text-xl font-semibold">{media.frenchTitle || media.title}</h2>
               </div>
 
               {/* Center Play Button */}

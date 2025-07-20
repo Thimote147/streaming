@@ -153,6 +153,140 @@ app.get('/api/categories', async (_req, res) => {
   }
 });
 
+// Debug endpoint
+app.get('/api/debug', (req, res) => {
+  res.json({ 
+    status: 'working',
+    mediaPath: MEDIA_PATH,
+    useLocalFiles: USE_LOCAL_FILES
+  });
+});
+
+
+// Search media
+app.get('/api/search', async (req, res) => {
+  try {
+    const rawQuery = req.query.q;
+    if (!rawQuery) {
+      console.log('No query provided, returning empty array');
+      return res.json([]);
+    }
+    
+    // Decode URL encoded characters (like accents)
+    const q = decodeURIComponent(rawQuery);
+    console.log('Search request received:', q, '(raw:', rawQuery, ')');
+    
+    let files = [];
+    
+    if (USE_LOCAL_FILES) {
+      console.log('Using local files for search...');
+      const { promisify } = await import('util');
+      const execAsync = promisify(exec);
+      
+      try {
+        const findCommand = `find "${MEDIA_PATH}" -type f \\( -name '*.mp4' -o -name '*.mkv' -o -name '*.avi' -o -name '*.mov' -o -name '*.mp3' -o -name '*.flac' -o -name '*.wav' \\) | head -100`;
+        console.log('Executing find command:', findCommand);
+        const { stdout } = await execAsync(findCommand);
+        files = stdout.split('\n').filter(line => line.trim());
+        console.log(`Found ${files.length} local files:`, files);
+      } catch (error) {
+        console.error('Error finding local files:', error);
+        return res.json([]);
+      }
+    } else {
+      console.log('Executing SSH command to fetch files...');
+      const command = `ssh -i ~/.ssh/streaming_key -o PasswordAuthentication=no -o StrictHostKeyChecking=no ${SSH_SERVER} "find ${SSH_PATH} -type f \\( -name '*.mp4' -o -name '*.mkv' -o -name '*.avi' -o -name '*.mov' -o -name '*.mp3' -o -name '*.flac' -o -name '*.wav' \\) | head -100"`;
+      const output = await executeSSH(command);
+      files = output.split('\n').filter(line => line.trim());
+      console.log('SSH output received, processing files...');
+    }
+    
+    const resultsWithMetadata = await Promise.all(files.map(async (filePath, index) => {
+      const fileName = filePath.split('/').pop() || '';
+      const fileNameWithoutExt = fileName.split('.').slice(0, -1).join('.');
+      const category = filePath.split('/').slice(-2, -1)[0];
+      const formattedTitle = formatTitle(fileNameWithoutExt);
+      
+      let movieData = null;
+      const year = extractYear(fileName);
+      const mediaType = getMediaType(category);
+      
+      if (TMDB_API_KEY && (mediaType === 'movie' || mediaType === 'series')) {
+        try {
+          const cleanTitle = cleanMovieTitle(fileNameWithoutExt);
+          movieData = await fetchMovieDataFromTMDB(cleanTitle, year, mediaType);
+        } catch (error) {
+          console.error('Error fetching TMDB data for search:', error);
+        }
+      }
+      
+      return {
+        id: `search_${index}`,
+        title: formattedTitle,
+        frenchTitle: movieData?.frenchTitle || null,
+        path: filePath,
+        type: mediaType,
+        genre: extractGenre(fileName),
+        year: year,
+        description: `${mediaType} - ${fileName}`,
+        poster: movieData?.poster || null,
+        frenchPoster: movieData?.frenchPoster || null,
+        backdrop: movieData?.backdrop || null
+      };
+    }));
+    
+    console.log(`Found ${resultsWithMetadata.length} files, filtering by query: "${q}"`);
+    
+    // Normalize function to remove accents for better matching
+    const normalize = (str) => {
+      if (!str) return '';
+      return str.toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, ''); // Remove diacritics
+    };
+    
+    // Filter results based on query matching title or frenchTitle
+    const filteredResults = resultsWithMetadata.filter(item => {
+      const queryNormalized = normalize(q);
+      const queryLower = q.toLowerCase();
+      
+      // Direct match (with accents)
+      const titleMatch = item.title.toLowerCase().includes(queryLower);
+      const frenchTitleMatch = item.frenchTitle && item.frenchTitle.toLowerCase().includes(queryLower);
+      
+      // Normalized match (without accents)
+      const titleNormalizedMatch = normalize(item.title).includes(queryNormalized);
+      const frenchTitleNormalizedMatch = item.frenchTitle && normalize(item.frenchTitle).includes(queryNormalized);
+      
+      const match = titleMatch || frenchTitleMatch || titleNormalizedMatch || frenchTitleNormalizedMatch;
+      if (match) {
+        console.log(`Match found: ${item.title} (French: ${item.frenchTitle}) for query: "${q}"`);
+      }
+      return match;
+    });
+    console.log(`Filtered results: ${filteredResults.length} items`);
+    
+    filteredResults.sort((a, b) => {
+      // Normalize titles for proper alphabetical sorting
+      const normalizeTitle = (title) => title
+        .toLowerCase()
+        .replace(/^(the|le|la|les|un|une|des|\[.*?\])\s+/i, '') // Remove articles and brackets
+        .replace(/[^\w\s]/g, '') // Remove special characters
+        .trim();
+      
+      const titleA = normalizeTitle(a.frenchTitle || a.title);
+      const titleB = normalizeTitle(b.frenchTitle || b.title);
+      
+      return titleA.localeCompare(titleB, 'fr', { sensitivity: 'base' });
+    });
+    
+    res.json(filteredResults.slice(0, 20)); // Limit to 20 results
+  } catch (error) {
+    console.error('Error searching media:', error);
+    res.json([]);
+  }
+});
+
 // Get content for a specific category
 app.get('/api/:type', async (req, res) => {
   try {
@@ -473,55 +607,39 @@ const cleanMovieTitle = (filename) => {
     .trim();
 };
 
-// Search media
-app.get('/api/search', async (req, res) => {
+// Helper function to fetch movie data from TMDB
+const fetchMovieDataFromTMDB = async (title, year, type) => {
+  if (!TMDB_API_KEY) return null;
+  
   try {
-    const { q } = req.query;
-    if (!q) {
-      return res.json([]);
-    }
+    const mediaType = type === 'series' ? 'tv' : 'movie';
+    const searchQuery = encodeURIComponent(title);
+    const yearParam = year ? `&year=${year}` : '';
     
-    const command = `ssh -i ~/.ssh/streaming_key -o PasswordAuthentication=no -o StrictHostKeyChecking=no ${SSH_SERVER} "find ${SSH_PATH} -type f -iname '*${q}*' \\( -name '*.mp4' -o -name '*.mkv' -o -name '*.avi' -o -name '*.mov' -o -name '*.mp3' -o -name '*.flac' -o -name '*.wav' \\) | head -10"`;
-    const output = await executeSSH(command);
+    const response = await fetch(
+      `https://api.themoviedb.org/3/search/${mediaType}?api_key=${TMDB_API_KEY}&query=${searchQuery}${yearParam}&language=fr-FR`
+    );
     
-    const files = output.split('\n').filter(line => line.trim());
+    if (!response.ok) return null;
     
-    const results = files.map((filePath, index) => {
-      const fileName = filePath.split('/').pop() || '';
-      const fileNameWithoutExt = fileName.split('.').slice(0, -1).join('.');
-      const category = filePath.split('/').slice(-2, -1)[0];
-      
-      return {
-        id: `search_${index}`,
-        title: formatTitle(fileNameWithoutExt),
-        path: filePath,
-        type: getMediaType(category),
-        genre: extractGenre(fileName),
-        year: extractYear(fileName),
-        description: `${getMediaType(category)} - ${fileName}`
-      };
-    });
+    const data = await response.json();
+    if (!data.results || data.results.length === 0) return null;
     
-    results.sort((a, b) => {
-      // Normalize titles for proper alphabetical sorting
-      const normalizeTitle = (title) => title
-        .toLowerCase()
-        .replace(/^(the|le|la|les|un|une|des|\[.*?\])\s+/i, '') // Remove articles and brackets
-        .replace(/[^\w\s]/g, '') // Remove special characters
-        .trim();
-      
-      const titleA = normalizeTitle(a.title);
-      const titleB = normalizeTitle(b.title);
-      
-      return titleA.localeCompare(titleB, 'fr', { sensitivity: 'base' });
-    });
+    const result = data.results[0];
+    const titleField = mediaType === 'tv' ? 'name' : 'title';
     
-    res.json(results);
+    return {
+      poster: result.poster_path ? `https://image.tmdb.org/t/p/w500${result.poster_path}` : null,
+      backdrop: result.backdrop_path ? `https://image.tmdb.org/t/p/w1280${result.backdrop_path}` : null,
+      frenchTitle: result[titleField] || null,
+      frenchDescription: result.overview || null
+    };
   } catch (error) {
-    console.error('Error searching media:', error);
-    res.json([]);
+    console.error('Error fetching TMDB data:', error);
+    return null;
   }
-});
+};
+
 
 // Stream media files - redirect to nginx in production
 app.get('/api/stream/:path(*)', async (req, res) => {

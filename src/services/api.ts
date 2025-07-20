@@ -1,6 +1,7 @@
 export interface MediaItem {
   id: string;
   title: string;
+  originalTitle: string;
   frenchTitle?: string;
   path: string;
   type: 'movie' | 'series' | 'music';
@@ -174,7 +175,8 @@ class StreamingAPI {
           type: 'movie',
           year: 2023,
           genre: 'Action',
-          description: 'Un film d\'action palpitant'
+          description: 'Un film d\'action palpitant',
+          originalTitle: "Action Movie"
         },
         {
           id: '2',
@@ -184,6 +186,7 @@ class StreamingAPI {
           year: 2022,
           genre: 'Comedy',
           description: 'Une comédie hilarante'
+          , originalTitle: "Comedy Film"
         }
       ],
       'Series': [
@@ -194,7 +197,8 @@ class StreamingAPI {
           type: 'series',
           year: 2023,
           genre: 'Drama',
-          description: 'Une série dramatique captivante'
+          description: 'Une série dramatique captivante',
+          originalTitle: "Drama Series"
         }
       ],
       'Musiques': [
@@ -205,7 +209,8 @@ class StreamingAPI {
           type: 'music',
           year: 2023,
           genre: 'Pop',
-          description: 'Album de musique pop'
+          description: 'Album de musique pop',
+          originalTitle: "Pop Album"
         }
       ]
     };
