@@ -33,8 +33,12 @@ const AccessRequestManager: React.FC = () => {
     
     try {
       const { error } = await updateAccessRequest(requestId, status);
-      if (!error) {
-        // Refresh the list
+      if (error) {
+        console.error('Error updating request:', error);
+        // Optionally show a toast/alert here
+      } else {
+        console.log('Request updated successfully');
+        // Force refresh the list
         await loadRequests();
       }
     } catch (error) {

@@ -145,15 +145,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const signUp = async (email: string, _password: string, username: string, reason: string) => {
+  const signUp = async (email: string, password: string, username: string, reason: string) => {
     try {
       setLoading(true);
       
-      // Don't create a Supabase auth user yet, just create an access request
+      // Create Supabase auth user first
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+
+      if (authError) {
+        return { error: authError as Error };
+      }
+
+      // Create access request with the user ID
       const { error: requestError } = await supabase
         .from('access_requests')
         .insert([
           {
+            user_id: authData.user?.id,
             email,
             username,
             reason,
@@ -166,6 +177,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (requestError) {
         return { error: requestError as Error };
       }
+
+      // Sign out the user immediately after signup to prevent access before approval
+      await supabase.auth.signOut();
 
       return { error: null };
     } catch (error) {
@@ -221,7 +235,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { error: new Error('Unauthorized: Admin access required') };
       }
 
-      const { error } = await supabase
+      // Get the access request details first
+      const { data: requestData, error: fetchError } = await supabase
+        .from('access_requests')
+        .select('*')
+        .eq('id', requestId)
+        .single();
+
+      if (fetchError || !requestData) {
+        return { error: new Error('Access request not found') };
+      }
+
+      // Update the access request status
+      const { error: updateError } = await supabase
         .from('access_requests')
         .update({
           status,
@@ -231,7 +257,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         })
         .eq('id', requestId);
 
-      return { error: error as Error | null };
+      if (updateError) {
+        return { error: updateError as Error };
+      }
+
+      // If approved, create the user profile
+      if (status === 'approved' && requestData.user_id) {
+        console.log('Creating profile for user:', requestData.user_id, 'username:', requestData.username);
+        
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .insert({
+            id: requestData.user_id,
+            username: requestData.username,
+            role: 'member',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .select()
+          .single();
+
+        console.log('Profile creation result:', { profileData, profileError });
+
+        if (profileError) {
+          console.error('Failed to create profile:', profileError);
+          return { error: new Error('Failed to create user profile: ' + profileError.message) };
+        }
+        
+        console.log('Profile created successfully');
+      }
+
+      return { error: null };
     } catch (error) {
       return { error: error as Error };
     }
@@ -240,22 +296,64 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signIn = async (email: string, password: string) => {
     try {
       setLoading(true);
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
       
       if (error) {
-        // Check if this is an "Invalid login credentials" error
-        if (error.message === 'Invalid login credentials') {
-          // Check if there's an access request for this email
+        console.log('Supabase auth error:', error.message); // Debug log
+        
+        // Handle auth errors by checking access request status first
+        const { data: accessRequest } = await supabase
+          .from('access_requests')
+          .select('status')
+          .eq('email', email)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+        
+        if (accessRequest) {
+          switch (accessRequest.status) {
+            case 'pending':
+              return { error: new Error('Votre demande d\'accès est en cours d\'examen par un administrateur.') };
+            case 'rejected':
+              return { error: new Error('Votre demande d\'accès a été refusée. Contactez un administrateur pour plus d\'informations.') };
+            case 'approved':
+              // For approved users, show the actual auth error (likely wrong password)
+              return { error: new Error('Email ou mot de passe invalide.') };
+          }
+        }
+        
+        return { error: new Error('Email ou mot de passe invalide.') };
+      }
+
+      // If login successful, check if user has a profile (meaning request was approved)
+      if (data.user) {
+        console.log('User logged in successfully, checking profile for user ID:', data.user.id);
+        
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', data.user.id)
+          .single();
+
+        console.log('Profile query result:', { profileData, profileError });
+
+        // If no profile exists, check access request status
+        if (profileError || !profileData) {
           const { data: accessRequest } = await supabase
             .from('access_requests')
             .select('status')
-            .eq('email', email)
+            .eq('user_id', data.user.id)
             .order('created_at', { ascending: false })
             .limit(1)
             .single();
+          
+          console.log('Access request status:', accessRequest);
+          
+          // Sign out the user since they don't have access yet
+          await supabase.auth.signOut();
           
           if (accessRequest) {
             switch (accessRequest.status) {
@@ -264,12 +362,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               case 'rejected':
                 return { error: new Error('Votre demande d\'accès a été refusée. Contactez un administrateur pour plus d\'informations.') };
               case 'approved':
-                return { error: new Error('Votre compte a été approuvé mais n\'a pas encore été créé. Contactez un administrateur.') };
+                return { error: new Error('Votre compte a été approuvé mais le profil n\'a pas été créé correctement. Contactez un administrateur.') };
+              default:
+                return { error: new Error('Votre compte n\'est pas encore activé. Contactez un administrateur.') };
             }
+          } else {
+            return { error: new Error('Aucune demande d\'accès trouvée. Veuillez faire une demande d\'inscription.') };
           }
         }
         
-        return { error: error as Error };
+        console.log('Profile found, user can access the application');
       }
       
       return { error: null };

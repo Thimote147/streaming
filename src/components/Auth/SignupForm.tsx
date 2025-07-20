@@ -8,7 +8,7 @@ interface SignupFormProps {
   onClose: () => void;
 }
 
-const SignupForm: React.FC<SignupFormProps> = ({ onSwitchToLogin, onClose }) => {
+const SignupForm: React.FC<SignupFormProps> = ({ onSwitchToLogin }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -49,10 +49,7 @@ const SignupForm: React.FC<SignupFormProps> = ({ onSwitchToLogin, onClose }) => 
       setError(error.message);
     } else {
       setSuccess('Votre demande d\'accès a été envoyée ! Un administrateur examinera votre demande.');
-      // Don't close immediately, show success message
-      setTimeout(() => {
-        onClose();
-      }, 3000);
+      // Keep modal open to show success message
     }
     
     setIsLoading(false);

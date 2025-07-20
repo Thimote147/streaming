@@ -14,7 +14,6 @@ export interface Profile {
   id: string;
   username: string;
   role: 'member' | 'admin';
-  status: 'pending' | 'approved' | 'rejected';
   created_at: string;
   updated_at: string;
 }
