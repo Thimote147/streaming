@@ -186,7 +186,7 @@ app.get('/api/search', async (req, res) => {
       const execAsync = promisify(exec);
       
       try {
-        const findCommand = `find "${MEDIA_PATH}" -type f \\( -name '*.mp4' -o -name '*.mkv' -o -name '*.avi' -o -name '*.mov' -o -name '*.mp3' -o -name '*.flac' -o -name '*.wav' \\) | head -100`;
+        const findCommand = `find "${MEDIA_PATH}" -type f \\( -name '*.mp4' -o -name '*.mp3' \\) | head -100`;
         console.log('Executing find command:', findCommand);
         const { stdout } = await execAsync(findCommand);
         files = stdout.split('\n').filter(line => line.trim());
@@ -332,7 +332,7 @@ const getCategoryItems = async (category) => {
             const filePath = path.join(dir, file);
             if (fs.statSync(filePath).isDirectory()) {
               getAllFiles(filePath, fileList);
-            } else if (/\.(mp4|webm|mp3|flac|wav|mkv|avi|mov)$/i.test(file)) {
+            } else if (/\.(mp4|mp3)$/i.test(file)) {
               fileList.push(filePath);
             }
           });
@@ -343,7 +343,7 @@ const getCategoryItems = async (category) => {
       }
     } else {
       // Use SSH
-      const command = `ssh -i ~/.ssh/streaming_key -o PasswordAuthentication=no -o StrictHostKeyChecking=no ${SSH_SERVER} "find ${SSH_PATH}/${category} -type f \\( -name '*.mp4' -o -name '*.webm' -o -name '*.mp3' -o -name '*.flac' -o -name '*.wav' -o -name '*.mkv' -o -name '*.avi' -o -name '*.mov' \\)"`;
+      const command = `ssh -i ~/.ssh/streaming_key -o PasswordAuthentication=no -o StrictHostKeyChecking=no ${SSH_SERVER} "find ${SSH_PATH}/${category} -type f \\( -name '*.mp4' -o -name '*.mp3' \\)"`;
       const output = await executeSSH(command);
       files = output.split('\n').filter(line => line.trim());
     }
