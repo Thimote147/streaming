@@ -17,13 +17,31 @@ const MediaDetails: React.FC<MediaDetailsProps> = ({
   onClose, 
   onAddToList 
 }) => {
-  const { poster, frenchPoster, backdrop, frenchTitle, frenchDescription, releaseYear } = useMovieData(media.title, media.year, media.type);
+  // Only fetch TMDB data for movies and series, not for music
+  const shouldFetchTMDB = media.type === 'movie' || media.type === 'series';
+  const { poster, frenchPoster, backdrop, frenchTitle, frenchDescription, releaseYear } = useMovieData(
+    shouldFetchTMDB ? media.title : '', 
+    shouldFetchTMDB ? media.year : undefined, 
+    shouldFetchTMDB ? media.type : undefined
+  );
   
-  // Use French title, poster and description if available
-  const displayTitle = frenchTitle || media.title;
-  const displayPoster = frenchPoster || poster;
-  const displayDescription = frenchDescription || media.description;
-  const displayYear = releaseYear || media.year;
+  // For music, use the embedded data directly
+  // For movies/series, use TMDB data first
+  const displayTitle = media.type === 'music' 
+    ? media.title 
+    : (frenchTitle || media.frenchTitle || media.title);
+  const displayPoster = media.type === 'music' 
+    ? media.poster 
+    : (frenchPoster || poster || media.poster);
+  const displayDescription = media.type === 'music' 
+    ? media.description 
+    : (frenchDescription || media.description);
+  const displayYear = media.type === 'music' 
+    ? media.year 
+    : (releaseYear || media.year);
+  const displayBackdrop = media.type === 'music' 
+    ? media.poster 
+    : (backdrop || displayPoster);
   
   // Check if this is a group with episodes
   const isGroup = media.isGroup && media.episodes && media.episodes.length > 0;
@@ -61,11 +79,11 @@ const MediaDetails: React.FC<MediaDetailsProps> = ({
       {/* Background */}
       <div className="relative min-h-screen">
         {/* Backdrop/Poster Background */}
-        {(backdrop || poster) ? (
+        {displayBackdrop ? (
           <div 
             className="absolute inset-0 bg-cover bg-center bg-no-repeat"
             style={{
-              backgroundImage: `url(${backdrop || poster})`,
+              backgroundImage: `url(${displayBackdrop})`,
             }}
           />
         ) : (
@@ -125,7 +143,7 @@ const MediaDetails: React.FC<MediaDetailsProps> = ({
                   <div className="flex gap-3 sm:gap-4 md:block transition-all duration-300 ease-out">
                     <motion.div
                       className="relative rounded-lg overflow-hidden shadow-2xl w-32 sm:w-40 md:w-full max-w-sm flex-shrink-0 transition-all duration-300 ease-out"
-                      style={{ aspectRatio: '2/3' }}
+                      style={{ aspectRatio: media.type === 'music' ? '1/1' : '2/3' }}
                       initial={{ opacity: 0, x: -50 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ 
@@ -153,17 +171,40 @@ const MediaDetails: React.FC<MediaDetailsProps> = ({
                     <div className="flex-1 flex flex-col justify-between md:hidden transition-all duration-300 ease-out">
                       {/* Meta Info */}
                       <div className="flex flex-wrap items-center gap-2 mb-3">
-                        {displayYear && (
-                          <div className="flex items-center space-x-1 text-gray-300 text-xs">
-                            <Calendar size={12} />
-                            <span>{displayYear}</span>
-                          </div>
-                        )}
-                        
-                        {media.genre && (
-                          <span className="bg-gray-700 text-white px-2 py-1 rounded-full text-xs">
-                            {media.genre}
-                          </span>
+                        {media.type === 'music' ? (
+                          <>
+                            {media.artist && (
+                              <div className="text-gray-300 text-xs">
+                                <span className="font-semibold">Artiste:</span> {media.artist}
+                              </div>
+                            )}
+                            {media.album && (
+                              <div className="text-gray-300 text-xs">
+                                <span className="font-semibold">Album:</span> {media.album}
+                              </div>
+                            )}
+                            {displayYear && (
+                              <div className="flex items-center space-x-1 text-gray-300 text-xs">
+                                <Calendar size={12} />
+                                <span>{displayYear}</span>
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            {displayYear && (
+                              <div className="flex items-center space-x-1 text-gray-300 text-xs">
+                                <Calendar size={12} />
+                                <span>{displayYear}</span>
+                              </div>
+                            )}
+                            
+                            {media.genre && (
+                              <span className="bg-gray-700 text-white px-2 py-1 rounded-full text-xs">
+                                {media.genre}
+                              </span>
+                            )}
+                          </>
                         )}
                         
                         <span className="bg-red-600 text-white px-2 py-1 rounded-full text-xs capitalize">
@@ -227,17 +268,40 @@ const MediaDetails: React.FC<MediaDetailsProps> = ({
                   <div className="hidden md:block transition-all duration-300 ease-out">
                     {/* Meta Info - Desktop */}
                     <div className="flex flex-wrap items-center gap-3 md:gap-4 mb-4 md:mb-6">
-                      {displayYear && (
-                        <div className="flex items-center space-x-1 text-gray-300 text-sm md:text-base">
-                          <Calendar size={14} className="md:w-4 md:h-4" />
-                          <span>{displayYear}</span>
-                        </div>
-                      )}
-                      
-                      {media.genre && (
-                        <span className="bg-gray-700 text-white px-2 py-1 md:px-3 md:py-1 rounded-full text-xs md:text-sm">
-                          {media.genre}
-                        </span>
+                      {media.type === 'music' ? (
+                        <>
+                          {media.artist && (
+                            <div className="text-gray-300 text-sm md:text-base">
+                              <span className="font-semibold">Artiste:</span> {media.artist}
+                            </div>
+                          )}
+                          {media.album && (
+                            <div className="text-gray-300 text-sm md:text-base">
+                              <span className="font-semibold">Album:</span> {media.album}
+                            </div>
+                          )}
+                          {displayYear && (
+                            <div className="flex items-center space-x-1 text-gray-300 text-sm md:text-base">
+                              <Calendar size={14} className="md:w-4 md:h-4" />
+                              <span>{displayYear}</span>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          {displayYear && (
+                            <div className="flex items-center space-x-1 text-gray-300 text-sm md:text-base">
+                              <Calendar size={14} className="md:w-4 md:h-4" />
+                              <span>{displayYear}</span>
+                            </div>
+                          )}
+                          
+                          {media.genre && (
+                            <span className="bg-gray-700 text-white px-2 py-1 md:px-3 md:py-1 rounded-full text-xs md:text-sm">
+                              {media.genre}
+                            </span>
+                          )}
+                        </>
                       )}
                       
                       <span className="bg-red-600 text-white px-2 py-1 md:px-3 md:py-1 rounded-full text-xs md:text-sm capitalize">
@@ -325,7 +389,15 @@ const MediaDetails: React.FC<MediaDetailsProps> = ({
                           <motion.div
                             key={episode.id}
                             className="flex items-center p-3 md:p-4 bg-gray-800/50 rounded-lg hover:bg-gray-700/50 transition-colors cursor-pointer"
-                            onClick={() => onPlay(episode)}
+                            onClick={() => {
+                              console.log('🎬 DEBUG: Clic sur film de saga détecté');
+                              console.log('🎬 DEBUG: ID du film cliqué:', episode.id);
+                              console.log('🎬 DEBUG: Titre du film:', episode.title);
+                              console.log('🎬 DEBUG: Données complètes de l\'épisode:', episode);
+                              console.log('🎬 DEBUG: Appel de onPlay avec l\'épisode');
+                              onPlay(episode);
+                              console.log('🎬 DEBUG: onPlay appelé avec succès');
+                            }}
                             whileHover={{ scale: 1.02 }}
                             whileTap={{ scale: 0.98 }}
                             transition={{ 

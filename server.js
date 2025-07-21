@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import crypto from 'crypto';
+import { parseFile } from 'music-metadata';
 import 'dotenv/config';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -219,6 +220,12 @@ app.get('/api/search', async (req, res) => {
         } catch (error) {
           console.error('Error fetching TMDB data for search:', error);
         }
+      } else if (mediaType === 'music') {
+        try {
+          movieData = await extractMusicMetadata(filePath);
+        } catch (error) {
+          console.error('Error extracting music metadata for search:', error);
+        }
       }
       
       return {
@@ -325,7 +332,7 @@ const getCategoryItems = async (category) => {
             const filePath = path.join(dir, file);
             if (fs.statSync(filePath).isDirectory()) {
               getAllFiles(filePath, fileList);
-            } else if (/\.(mp4|webm)$/i.test(file)) {
+            } else if (/\.(mp4|webm|mp3|flac|wav|mkv|avi|mov)$/i.test(file)) {
               fileList.push(filePath);
             }
           });
@@ -336,31 +343,54 @@ const getCategoryItems = async (category) => {
       }
     } else {
       // Use SSH
-      const command = `ssh -i ~/.ssh/streaming_key -o PasswordAuthentication=no -o StrictHostKeyChecking=no ${SSH_SERVER} "find ${SSH_PATH}/${category} -type f \\( -name '*.mp4' -o -name '*.webm' \\)"`;
+      const command = `ssh -i ~/.ssh/streaming_key -o PasswordAuthentication=no -o StrictHostKeyChecking=no ${SSH_SERVER} "find ${SSH_PATH}/${category} -type f \\( -name '*.mp4' -o -name '*.webm' -o -name '*.mp3' -o -name '*.flac' -o -name '*.wav' -o -name '*.mkv' -o -name '*.avi' -o -name '*.mov' \\)"`;
       const output = await executeSSH(command);
       files = output.split('\n').filter(line => line.trim());
     }
     
-    const mediaItems = files.map((filePath) => {
+    const mediaItems = await Promise.all(files.map(async (filePath) => {
       const fileName = filePath.split('/').pop() || '';
       const fileNameWithoutExt = fileName.split('.').slice(0, -1).join('.');
+      const mediaType = getMediaType(category);
       
       // Convert local path to web path
       const webPath = USE_LOCAL_FILES ? 
         filePath.replace(MEDIA_PATH, '') : 
         filePath;
       
+      let musicMetadata = null;
+      if (mediaType === 'music') {
+        try {
+          musicMetadata = await extractMusicMetadata(filePath);
+        } catch (error) {
+          console.error('Error extracting music metadata:', error);
+        }
+      }
+      
+      // Pour les musiques, utiliser un ID simple sans préfixe de catégorie
+      const cleanTitleForUrl = (title) => {
+        return title
+          .toLowerCase()
+          .replace(/[^\w\s-]/g, '')
+          .replace(/\s+/g, '_')
+          .replace(/_+/g, '_')
+          .replace(/^_|_$/g, '');
+      };
+      
       return {
-        id: generateUniqueId(fileNameWithoutExt, category),
-        title: formatTitle(fileNameWithoutExt),
+        id: mediaType === 'music' ? cleanTitleForUrl(fileNameWithoutExt) : generateUniqueId(fileNameWithoutExt, category),
+        title: musicMetadata?.title || formatTitle(fileNameWithoutExt),
         originalFileName: fileNameWithoutExt, // Keep original for pattern matching
         path: webPath,
-        type: getMediaType(category),
-        genre: extractGenre(fileName),
-        year: extractYear(fileName),
-        description: `${getMediaType(category)} - ${fileName}`
+        type: mediaType,
+        genre: musicMetadata?.genre || extractGenre(fileName),
+        year: musicMetadata?.year || extractYear(fileName),
+        description: `${mediaType} - ${fileName}`,
+        poster: musicMetadata?.poster || null,
+        artist: musicMetadata?.artist || null,
+        album: musicMetadata?.album || null
       };
-    });
+    }));
     
     // Group media items by series/sequels
     return groupMediaItems(mediaItems, category);
@@ -510,6 +540,29 @@ app.get('/api/poster/:title', async (req, res) => {
   }
 });
 
+// Serve album artwork from cache
+app.get('/api/artwork/:artworkId', (req, res) => {
+  const { artworkId } = req.params;
+  
+  const artwork = albumArtworkCache.get(artworkId);
+  if (!artwork) {
+    return res.status(404).json({ error: 'Artwork not found' });
+  }
+  
+  
+  // Set appropriate content type and headers
+  res.set('Content-Type', artwork.format || 'image/jpeg');
+  res.set('Cache-Control', 'public, max-age=86400'); // Cache for 24 hours
+  
+  // Send binary data properly
+  if (Buffer.isBuffer(artwork.data)) {
+    res.end(artwork.data);
+  } else {
+    // If it's not a buffer, create one
+    res.end(Buffer.from(artwork.data));
+  }
+});
+
 // French to English movie title mapping
 const frenchToEnglishMapping = {
   "avatar": "avatar",
@@ -608,6 +661,48 @@ const cleanMovieTitle = (filename) => {
     .trim();
 };
 
+// Cache for storing extracted album artwork
+const albumArtworkCache = new Map();
+
+// Helper function to extract album artwork from music files
+const extractMusicMetadata = async (filePath) => {
+  if (!USE_LOCAL_FILES) {
+    // For remote files, we can't extract metadata
+    return null;
+  }
+  
+  try {
+    const metadata = await parseFile(filePath);
+    const artwork = metadata.common.picture?.[0];
+    
+    let artworkUrl = null;
+    if (artwork) {
+      // Generate a consistent ID based on filename only (not full path)
+      const fileName = filePath.split('/').pop() || filePath;
+      const artworkId = crypto.createHash('md5').update(fileName).digest('hex');
+      // Cache the artwork data
+      albumArtworkCache.set(artworkId, {
+        data: artwork.data,
+        format: artwork.format || 'image/jpeg'
+      });
+      // Create URL to serve the artwork
+      artworkUrl = `/api/artwork/${artworkId}`;
+    }
+    
+    return {
+      poster: artworkUrl,
+      artist: metadata.common.artist || null,
+      album: metadata.common.album || null,
+      title: metadata.common.title || null,
+      year: metadata.common.year || null,
+      genre: metadata.common.genre?.[0] || null
+    };
+  } catch (error) {
+    console.error('Error extracting music metadata:', error);
+    return null;
+  }
+};
+
 // Helper function to fetch movie data from TMDB
 const fetchMovieDataFromTMDB = async (title, year, type) => {
   if (!TMDB_API_KEY) return null;
@@ -659,19 +754,22 @@ app.get('/api/stream/:path(*)', async (req, res) => {
       }
       
       const ext = path.extname(filePath).toLowerCase();
-      if (['.mp4', '.webm'].includes(ext)) {
+      if (['.mp4', '.webm', '.mp3', '.flac', '.wav'].includes(ext)) {
         res.sendFile(localFilePath);
       } else {
-        res.status(415).send('Unsupported media type. Only MP4 and WebM files are supported.');
+        res.status(415).send('Unsupported media type. Only MP4, WebM, MP3, FLAC, and WAV files are supported.');
       }
     } else {
       // Serve MP4/WebM files via SSH
       const ext = path.extname(filePath).toLowerCase();
       
-      if (['.mp4', '.webm'].includes(ext)) {
+      if (['.mp4', '.webm', '.mp3', '.flac', '.wav'].includes(ext)) {
         const mimeTypes = {
           '.mp4': 'video/mp4',
-          '.webm': 'video/webm'
+          '.webm': 'video/webm',
+          '.mp3': 'audio/mpeg',
+          '.flac': 'audio/flac',
+          '.wav': 'audio/wav'
         };
         
         res.setHeader('Content-Type', mimeTypes[ext]);
@@ -702,7 +800,7 @@ app.get('/api/stream/:path(*)', async (req, res) => {
           console.error('SSH stderr:', data.toString());
         });
       } else {
-        res.status(415).send('Unsupported media type. Only MP4 and WebM files are supported.');
+        res.status(415).send('Unsupported media type. Only MP4, WebM, MP3, FLAC, and WAV files are supported.');
       }
     }
   } catch (error) {

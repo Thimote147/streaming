@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Home from './pages/Home';
@@ -7,6 +7,7 @@ import Category from './pages/Category';
 import Search from './pages/Search';
 import Player from './pages/Player';
 import Details from './pages/Details';
+import NotFound from './pages/NotFound';
 import AuthModal from './components/Auth/AuthModal';
 import UserProfile from './components/Profile/UserProfile';
 
@@ -43,6 +44,30 @@ function App() {
                 <Search />
               </ProtectedRoute>
             } />
+            <Route path="/player/musiques/:title" element={
+              <ProtectedRoute 
+                onShowAuth={() => setShowAuthModal(true)}
+                onShowProfile={() => setShowProfileModal(true)}
+              >
+                <Player />
+              </ProtectedRoute>
+            } />
+            <Route path="/player/:mediaType/:seriesTitle/:seasonNumber/:episodeNumber" element={
+              <ProtectedRoute 
+                onShowAuth={() => setShowAuthModal(true)}
+                onShowProfile={() => setShowProfileModal(true)}
+              >
+                <Player />
+              </ProtectedRoute>
+            } />
+            <Route path="/player/:mediaType/:seriesTitle/:episodeNumber" element={
+              <ProtectedRoute 
+                onShowAuth={() => setShowAuthModal(true)}
+                onShowProfile={() => setShowProfileModal(true)}
+              >
+                <Player />
+              </ProtectedRoute>
+            } />
             <Route path="/player/:mediaId" element={
               <ProtectedRoute 
                 onShowAuth={() => setShowAuthModal(true)}
@@ -67,7 +92,15 @@ function App() {
                 <Details />
               </ProtectedRoute>
             } />
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="/musiques/:title" element={
+              <ProtectedRoute 
+                onShowAuth={() => setShowAuthModal(true)}
+                onShowProfile={() => setShowProfileModal(true)}
+              >
+                <Details />
+              </ProtectedRoute>
+            } />
+            <Route path="*" element={<NotFound />} />
           </Routes>
 
           {/* Auth Modal */}

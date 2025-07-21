@@ -31,11 +31,15 @@ const Category: React.FC = () => {
   };
 
   const handlePlay = (media: MediaItem) => {
-    navigate(`/player/${encodeURIComponent(media.id)}`);
+    if (media.type === 'music') {
+      navigate(`/player/musiques/${media.id}`);
+    } else {
+      navigate(`/player/${encodeURIComponent(media.id)}`);
+    }
   };
 
   const handleMoreInfo = (media: MediaItem) => {
-    const route = media.type === 'movie' ? 'films' : media.type === 'series' ? 'series' : 'films';
+    const route = media.type === 'movie' ? 'films' : media.type === 'series' ? 'series' : media.type === 'music' ? 'musiques' : 'films';
     const title = media.frenchTitle || media.title;
     const cleanTitle = cleanTitleForUrl(title);
     navigate(`/${route}/${cleanTitle}`);

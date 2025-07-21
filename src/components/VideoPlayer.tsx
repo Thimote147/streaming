@@ -14,7 +14,11 @@ interface VideoPlayerProps {
 
 const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible, startTime = 0 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  
+  // Determine which ref to use based on media type
+  const mediaRef = media.type === 'music' ? audioRef : videoRef;
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [volume, setVolume] = useState(1);
@@ -37,42 +41,42 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible, st
 
   // Sauvegarder la progression
   const saveProgressCallback = useCallback(async () => {
-    if (!videoRef.current || !user || !hasStarted) return;
+    if (!mediaRef.current || !user || !hasStarted) return;
 
-    const current = videoRef.current.currentTime;
-    const totalDuration = videoRef.current.duration;
+    const current = mediaRef.current.currentTime;
+    const totalDuration = mediaRef.current.duration;
 
     // Éviter de sauvegarder trop souvent
     if (Math.abs(current - lastSavedTime) < 10) return;
 
     await saveProgress(media.path, media.title, current, totalDuration);
     setLastSavedTime(current);
-  }, [media.path, media.title, saveProgress, user, hasStarted, lastSavedTime]);
+  }, [media.path, media.title, mediaRef, saveProgress, user, hasStarted, lastSavedTime]);
 
   // Gérer la fin du visionnage
   const handleVideoEnd = useCallback(async () => {
-    if (!videoRef.current || !user) return;
+    if (!mediaRef.current || !user) return;
 
-    const totalDuration = videoRef.current.duration;
+    const totalDuration = mediaRef.current.duration;
     const sessionEnd = new Date();
     const sessionDuration = (sessionEnd.getTime() - sessionStart.getTime()) / 1000;
 
     await markAsCompleted(media.path, media.title, totalDuration);
     await addToHistory(media.path, media.title, sessionDuration, totalDuration, sessionStart, sessionEnd);
-  }, [media.path, media.title, markAsCompleted, addToHistory, sessionStart, user]);
+  }, [media.path, media.title, mediaRef, markAsCompleted, addToHistory, sessionStart, user]);
 
   // Charger la progression sauvegardée
   useEffect(() => {
     const loadSavedProgress = async () => {
-      if (!user || !videoRef.current) return;
+      if (!user || !mediaRef.current) return;
 
       try {
         const progress = await getProgressForMovie(media.path);
         if (progress && progress.current_position > 30) { // Reprendre seulement si > 30 secondes
-          videoRef.current.currentTime = startTime || progress.current_position;
+          mediaRef.current.currentTime = startTime || progress.current_position;
           setLastSavedTime(startTime || progress.current_position);
         } else if (startTime) {
-          videoRef.current.currentTime = startTime;
+          mediaRef.current.currentTime = startTime;
           setLastSavedTime(startTime);
         }
       } catch (error) {
@@ -83,10 +87,10 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible, st
     if (duration > 0) {
       loadSavedProgress();
     }
-  }, [media.path, startTime, getProgressForMovie, user, duration]);
+  }, [media.path, mediaRef, startTime, getProgressForMovie, user, duration]);
 
   useEffect(() => {
-    const video = videoRef.current; // Save ref to local variable
+    const video = mediaRef.current; // Save ref to local variable
 
     if (video) {
       const handleLoadedMetadata = () => {
@@ -136,11 +140,11 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible, st
         video.removeEventListener('ended', handleVideoEnd);
       };
     }
-  }, [media.path, handleVideoEnd]);
+  }, [media.path, mediaRef, handleVideoEnd]);
 
   // Configuration des intervalles de sauvegarde
   useEffect(() => {
-    const video = videoRef.current;
+    const video = mediaRef.current;
     if (!user) return;
 
     const progressInterval = setInterval(saveProgressCallback, 30000); // Toutes les 30 secondes
@@ -151,7 +155,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible, st
     }, 10000); // Sauvegarde rapide toutes les 10 secondes
 
     const handleVisibilityChange = () => {
-      if (document.hidden && videoRef.current && hasStarted) {
+      if (document.hidden && mediaRef.current && hasStarted) {
         saveProgressCallback();
       }
     };
@@ -168,43 +172,45 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible, st
         saveProgressCallback();
       }
     };
-  }, [saveProgressCallback, user, hasStarted]);
+  }, [saveProgressCallback, user, hasStarted, mediaRef]);
 
   const togglePlay = () => {
-    if (videoRef.current) {
+    if (mediaRef.current) {
       if (isPlaying) {
-        videoRef.current.pause();
+        mediaRef.current.pause();
       } else {
-        videoRef.current.play();
+        mediaRef.current.play().catch(error => {
+          console.error('🎵 Play failed:', error);
+        });
       }
     }
   };
 
   const toggleMute = () => {
-    if (videoRef.current) {
-      videoRef.current.muted = !isMuted;
+    if (mediaRef.current) {
+      mediaRef.current.muted = !isMuted;
     }
   };
 
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newVolume = parseFloat(e.target.value);
     setVolume(newVolume);
-    if (videoRef.current) {
-      videoRef.current.volume = newVolume;
+    if (mediaRef.current) {
+      mediaRef.current.volume = newVolume;
     }
   };
 
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newTime = parseFloat(e.target.value);
     setCurrentTime(newTime);
-    if (videoRef.current) {
-      videoRef.current.currentTime = newTime;
+    if (mediaRef.current) {
+      mediaRef.current.currentTime = newTime;
     }
   };
 
   const skip = (seconds: number) => {
-    if (videoRef.current) {
-      videoRef.current.currentTime = Math.max(0, Math.min(duration, currentTime + seconds));
+    if (mediaRef.current) {
+      mediaRef.current.currentTime = Math.max(0, Math.min(duration, currentTime + seconds));
     }
   };
 
@@ -273,19 +279,67 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible, st
           }
         }}
       >
-        {/* Video Element */}
-        <video
-          ref={videoRef}
-          className="w-full h-full object-contain"
-          src={`/api/stream/${encodeURIComponent(media.path)}`}
-          autoPlay
-          preload="metadata"
-          playsInline
-          onClick={(e) => {
-            e.stopPropagation();
-            togglePlay();
-          }}
-        />
+        {/* Media Element */}
+        {media.type === 'music' ? (
+          <div className="flex flex-col items-center justify-center h-full">
+            {/* Album artwork background for music */}
+            {media.poster && (
+              <div 
+                className="absolute inset-0 bg-cover bg-center opacity-20"
+                style={{ backgroundImage: `url(${media.poster})` }}
+              />
+            )}
+            
+            {/* Music player display */}
+            <div className="relative z-10 text-center">
+              {media.poster && (
+                <img 
+                  src={media.poster} 
+                  alt={media.title}
+                  className="w-64 h-64 mx-auto mb-6 rounded-xl shadow-2xl"
+                />
+              )}
+              <h2 className="text-2xl font-bold text-white mb-2">{media.title}</h2>
+              {media.artist && (
+                <p className="text-lg text-gray-300 mb-1">{media.artist}</p>
+              )}
+              {media.album && (
+                <p className="text-md text-gray-400">{media.album}</p>
+              )}
+            </div>
+            
+            <audio
+              ref={audioRef}
+              src={`/api/stream/${encodeURIComponent(media.path)}`}
+              autoPlay
+              preload="metadata"
+              onLoadedData={() => {
+                console.log('🎵 Audio loaded, attempting to play');
+                audioRef.current?.play().catch(error => {
+                  console.error('🎵 Auto-play failed:', error);
+                  setIsLoading(false);
+                });
+              }}
+              onError={(e) => {
+                console.error('🎵 Audio error:', e);
+                setIsLoading(false);
+              }}
+            />
+          </div>
+        ) : (
+          <video
+            ref={videoRef}
+            className="w-full h-full object-contain"
+            src={`/api/stream/${encodeURIComponent(media.path)}`}
+            autoPlay
+            preload="metadata"
+            playsInline
+            onClick={(e) => {
+              e.stopPropagation();
+              togglePlay();
+            }}
+          />
+        )}
 
         {/* Loading Overlay */}
         {isLoading && (
@@ -411,12 +465,14 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible, st
                   </div>
 
                   <div className="flex items-center space-x-4">
-                    <button
-                      onClick={toggleFullscreen}
-                      className="text-white hover:text-gray-300 transition-colors"
-                    >
-                      {isFullscreen ? <Minimize size={24} /> : <Maximize size={24} />}
-                    </button>
+                    {media.type !== 'music' && (
+                      <button
+                        onClick={toggleFullscreen}
+                        className="text-white hover:text-gray-300 transition-colors"
+                      >
+                        {isFullscreen ? <Minimize size={24} /> : <Maximize size={24} />}
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

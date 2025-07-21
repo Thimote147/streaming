@@ -14,6 +14,9 @@ export interface MediaItem {
   genre?: string;
   description?: string;
   frenchDescription?: string;
+  // Music-specific fields
+  artist?: string;
+  album?: string;
   // Grouping fields
   isGroup?: boolean;
   episodeCount?: number;

@@ -31,9 +31,9 @@ const Header: React.FC<HeaderProps> = ({ onShowAuth, onShowProfile, isAuthentica
 
   const categories = [
     { id: '/', name: 'Accueil', path: '/' },
-    { id: 'Films', name: 'Films', path: '/Films' },
-    { id: 'Series', name: 'Series', path: '/Series' },
-    { id: 'Musiques', name: 'Musiques', path: '/Musiques' }
+    { id: 'Films', name: 'Films', path: '/films' },
+    { id: 'Series', name: 'Series', path: '/series' },
+    { id: 'Musiques', name: 'Musiques', path: '/musiques' }
   ];
 
   // Debounced search function
@@ -213,7 +213,7 @@ const Header: React.FC<HeaderProps> = ({ onShowAuth, onShowProfile, isAuthentica
       navigate(`/${route}/${cleanSeriesName}`);
     } else {
       // For individual items, use the original title (not the french one)
-      const route = media.type === 'movie' ? 'films' : media.type === 'series' ? 'series' : 'films';
+      const route = media.type === 'movie' ? 'films' : media.type === 'series' ? 'series' : media.type === 'music' ? 'musiques' : 'films';
       // Try to use the original title from search results, fallback to current title
       const originalTitle = (media as MediaItem & { originalTitle?: string }).originalTitle || media.title;
       const cleanTitle = cleanTitleForUrl(originalTitle);
@@ -230,12 +230,15 @@ const Header: React.FC<HeaderProps> = ({ onShowAuth, onShowProfile, isAuthentica
     
     // For grouped series, play the first episode
     if (media.isGroup && media.episodes && media.episodes.length > 0) {
-      console.log('Playing first episode of group:', media.episodes[0].id);
       navigate(`/player/${encodeURIComponent(media.episodes[0].id)}`);
     } else {
-      // For individual media items, play directly
-      console.log('Playing individual media:', media.id);
-      navigate(`/player/${encodeURIComponent(media.id)}`);
+      // For music files, use clean URLs
+      if (media.type === 'music') {
+        navigate(`/player/musiques/${media.id}`);
+      } else {
+        // For individual video media items, play directly
+        navigate(`/player/${encodeURIComponent(media.id)}`);
+      }
     }
   };
 

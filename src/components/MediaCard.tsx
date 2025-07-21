@@ -21,11 +21,23 @@ const MediaCard: React.FC<MediaCardProps> = ({
 }) => {
   const [isHovered, setIsHovered] = React.useState(false);
   const [imageError, setImageError] = React.useState(false);
-  const { poster, frenchPoster, frenchTitle, releaseYear, loading } = useMovieData(media.title, media.year, media.type);
   
-  // Use French title and poster if available, otherwise use original
-  const displayTitle = frenchTitle || media.title;
-  const displayPoster = frenchPoster || poster;
+  // Only fetch TMDB data for movies and series, not for music
+  const shouldFetchTMDB = media.type === 'movie' || media.type === 'series';
+  const { poster, frenchPoster, frenchTitle, releaseYear, loading } = useMovieData(
+    shouldFetchTMDB ? media.title : '', 
+    shouldFetchTMDB ? media.year : undefined, 
+    shouldFetchTMDB ? media.type : undefined
+  );
+  
+  // For music, use the embedded artwork first, then fallback to TMDB
+  // For movies/series, use TMDB first, then fallback to embedded data
+  const displayTitle = frenchTitle || media.frenchTitle || media.title;
+  const displayPoster = media.type === 'music' 
+    ? (media.poster || frenchPoster || poster)  // Music: use embedded artwork first
+    : (frenchPoster || poster || media.poster); // Movies/Series: use TMDB first
+  
+  
   // Use TMDB release year as primary source, fallback to file year
   const displayYear = releaseYear || media.year;
   
@@ -65,7 +77,9 @@ const MediaCard: React.FC<MediaCardProps> = ({
       style={{ zIndex: isHovered ? 20 : 1 }}
     >
       {/* Main Card */}
-      <div className="relative group cursor-pointer rounded-lg overflow-hidden bg-gray-800 aspect-[2/3] shadow-lg hover:shadow-2xl transition-all duration-300">
+      <div className={`relative group cursor-pointer rounded-lg overflow-hidden bg-gray-800 shadow-lg hover:shadow-2xl transition-all duration-300 ${
+        media.type === 'music' ? 'aspect-square' : 'aspect-[2/3]'
+      }`}>
         {/* Poster or Placeholder */}
         {displayPoster && !imageError ? (
           <img 

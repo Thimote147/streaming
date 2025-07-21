@@ -65,8 +65,8 @@ const Hero: React.FC<HeroProps> = ({ featuredMedia, onPlay, onMoreInfo }) => {
       </div>
 
       {/* Content */}
-      <div className="relative z-10 flex items-end md:items-center h-full transition-all duration-300">
-        <div className="container mx-auto px-4 pb-24 md:pb-0 md:px-8 transition-all duration-300">
+      <div className="relative z-10 flex items-center h-full transition-all duration-300">
+        <div className="container mx-auto px-4 md:px-8 pt-24 md:pt-32 transition-all duration-300">
           <div className="max-w-2xl w-full">
             <motion.h1 
               className="text-2xl sm:text-3xl md:text-4xl lg:text-6xl font-bold text-white mb-3 md:mb-4 leading-tight transition-all duration-300"
@@ -79,8 +79,13 @@ const Hero: React.FC<HeroProps> = ({ featuredMedia, onPlay, onMoreInfo }) => {
             </motion.h1>
             
             <motion.p 
-              className="text-sm sm:text-base md:text-lg lg:text-xl text-gray-200 mb-4 md:mb-6 leading-relaxed max-h-20 md:max-h-none overflow-hidden transition-all duration-300"
-              style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.8)' }}
+              className="text-sm sm:text-base md:text-lg lg:text-xl text-gray-200 mb-4 md:mb-6 leading-relaxed overflow-hidden transition-all duration-300"
+              style={{ 
+                textShadow: '1px 1px 2px rgba(0,0,0,0.8)',
+                display: '-webkit-box',
+                WebkitLineClamp: 3,
+                WebkitBoxOrient: 'vertical'
+              }}
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.4 }}

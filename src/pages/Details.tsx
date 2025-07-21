@@ -81,13 +81,27 @@ const Details: React.FC = () => {
 
 
   const handlePlay = (media: MediaItem) => {
-    console.log('🎬 handlePlay appelée');
-    console.log('📽️ ID du média reçu:', media.id);
     
     let navigationUrl: string;
     
-    // Vérifier si le média a une propriété sequelNumber (film de saga)
-    if (media.sequelNumber && media.type === 'movie') {
+    // 1. Détecter si c'est un épisode (seasonNumber et episodeNumber existent)
+    if (media.seasonNumber && media.episodeNumber) {
+      
+      // Utiliser seriesTitle si disponible, sinon le titre du média
+      const seriesName = media.seriesTitle || media.title;
+      const cleanSeriesName = cleanTitleForUrl(seriesName);
+      
+      // Formater les numéros avec un zéro initial si nécessaire
+      const seasonFormatted = media.seasonNumber.toString().padStart(2, '0');
+      const episodeFormatted = media.episodeNumber.toString().padStart(2, '0');
+      
+      // Générer l'URL au format /player/series/nom_serie/s{seasonNumber}/e{episodeNumber}
+      navigationUrl = `/player/series/${cleanSeriesName}/s${seasonFormatted}/e${episodeFormatted}`;
+      console.log('🔗 URL d\'épisode générée:', navigationUrl);
+      console.log('📝 Nom de série nettoyé:', cleanSeriesName);
+    } 
+    // 2. Vérifier si le média a une propriété sequelNumber (film de saga)
+    else if (media.sequelNumber && media.type === 'movie') {
       console.log('🎭 Détection d\'un film de saga avec sequelNumber:', media.sequelNumber);
       
       // Extraire le nom de base de la série (enlever le numéro à la fin)
@@ -114,13 +128,17 @@ const Details: React.FC = () => {
       navigationUrl = `/player/series/${baseName}/${media.sequelNumber}`;
       console.log('🔗 URL de série générée:', navigationUrl);
       console.log('📝 Nom de base extrait:', baseName);
+    } else if (media.type === 'music') {
+      // 3. Fichier musical - utiliser l'URL propre
+      navigationUrl = `/player/musiques/${media.id}`;
     } else {
-      // Utiliser l'ancien format en fallback
+      // 4. Média individuel (fallback)
       navigationUrl = `/player/${encodeURIComponent(media.id)}`;
       console.log('🔗 URL classique utilisée (fallback):', navigationUrl);
+      console.log('ℹ️ Média individuel ou format non reconnu');
     }
     
-    console.log('🚀 Navigation en cours...');
+    console.log('🚀 Navigation vers:', navigationUrl);
     navigate(navigationUrl);
   };
 
