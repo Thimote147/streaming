@@ -160,6 +160,7 @@ const Header: React.FC<HeaderProps> = ({ onShowAuth, onShowProfile, isAuthentica
     setSearchQuery(value);
     if (value.trim()) {
       setIsSearching(true);
+      setShowSearchResults(true); // Show results immediately when typing
       debouncedSearch(value);
     } else {
       setSearchResults([]);
@@ -183,14 +184,16 @@ const Header: React.FC<HeaderProps> = ({ onShowAuth, onShowProfile, isAuthentica
 
   // Check if we're on mobile
   const [isMobile, setIsMobile] = useState(false);
+  const [isLargeScreen, setIsLargeScreen] = useState(false);
   useEffect(() => {
-    const checkMobile = () => {
+    const checkScreenSize = () => {
       setIsMobile(window.innerWidth < 768);
+      setIsLargeScreen(window.innerWidth >= 1024); // lg breakpoint
     };
     
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
+    checkScreenSize();
+    window.addEventListener('resize', checkScreenSize);
+    return () => window.removeEventListener('resize', checkScreenSize);
   }, []);
 
   // Handle search result selection
@@ -199,11 +202,12 @@ const Header: React.FC<HeaderProps> = ({ onShowAuth, onShowProfile, isAuthentica
     setSearchQuery('');
     setIsSearchOpen(false);
     
-    // For grouped series, use the original title from the first episode
+    // For grouped series, use the series name (not episode title)
     if (media.isGroup && media.episodes && media.episodes.length > 0) {
       const route = media.type === 'series' ? 'series' : 'films';
-      const originalTitle = media.episodes[0].title; // Use original episode title
-      navigate(`/${route}/${encodeURIComponent(originalTitle)}`);
+      // Use the extracted series name, not the full episode title
+      const seriesName = extractSeriesName(media.episodes[0].title);
+      navigate(`/${route}/${encodeURIComponent(seriesName)}`);
     } else {
       // For individual items, use the original title (not the french one)
       const route = media.type === 'movie' ? 'films' : media.type === 'series' ? 'series' : 'films';
@@ -278,7 +282,7 @@ const Header: React.FC<HeaderProps> = ({ onShowAuth, onShowProfile, isAuthentica
 
           {/* Desktop Navigation */}
           <AnimatePresence>
-            {!(isMobile && isMobileSearchFocused) && isAuthenticated && (
+            {!(isMobile && isMobileSearchFocused) && isAuthenticated && (isLargeScreen || !isSearchOpen) && (
               <motion.nav 
                 className="hidden md:flex space-x-8 transition-all duration-500 ease-in-out"
                 initial={{ opacity: 1, y: 0 }}
@@ -307,7 +311,7 @@ const Header: React.FC<HeaderProps> = ({ onShowAuth, onShowProfile, isAuthentica
           <AnimatePresence>
             {!(isMobile && isMobileSearchFocused) && (
               <motion.div 
-                className="hidden md:flex items-center space-x-4 transition-all duration-500 ease-in-out"
+                className="hidden md:flex items-center space-x-2 lg:space-x-4 transition-all duration-500 ease-in-out"
                 initial={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 20 }}
                 transition={{ duration: 0.2 }}
@@ -330,7 +334,7 @@ const Header: React.FC<HeaderProps> = ({ onShowAuth, onShowProfile, isAuthentica
                           value={searchQuery}
                           onChange={(e) => handleSearchChange(e.target.value)}
                           placeholder="Rechercher..."
-                          className="bg-black/70 border border-gray-600 rounded-l px-3 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-white transition-all duration-500 ease-in-out w-64"
+                          className="bg-black/70 border border-gray-600 rounded-l px-3 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-white transition-all duration-500 ease-in-out w-48 lg:w-64"
                           autoFocus
                         />
                         {isSearching && (
@@ -360,7 +364,7 @@ const Header: React.FC<HeaderProps> = ({ onShowAuth, onShowProfile, isAuthentica
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0, y: 5 }}
                           transition={{ duration: 0.15 }}
-                          className="absolute top-full left-0 right-0 mt-2 bg-gray-900/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-gray-700/30 z-50 max-h-80 overflow-hidden"
+                          className="absolute top-full left-0 right-0 mt-2 bg-black/60 backdrop-blur-xl rounded-2xl shadow-2xl border border-gray-700/20 z-50 max-h-80 overflow-hidden"
                         >
                           {searchResults.length > 0 ? (
                             <div className="divide-y divide-gray-700/20">
@@ -444,7 +448,7 @@ const Header: React.FC<HeaderProps> = ({ onShowAuth, onShowProfile, isAuthentica
             {isAuthenticated ? (
               <div className="flex items-center space-x-3 transition-all duration-500 ease-in-out">
                 <span className="text-white text-sm transition-all duration-500 ease-in-out">
-                  <span className="hidden md:inline">Bonjour, </span>
+                  <span className="hidden lg:inline">Bonjour, </span>
                   <span className="font-medium">{profile?.username}</span>
                 </span>
                 <motion.button 
@@ -495,7 +499,7 @@ const Header: React.FC<HeaderProps> = ({ onShowAuth, onShowProfile, isAuthentica
         <AnimatePresence mode="wait">
           {isAuthenticated && isMobile && (isMobileMenuOpen || isMobileSearchFocused) && (
             <motion.div 
-              className="md:hidden mt-4 relative overflow-hidden" 
+              className="md:hidden mt-4 relative overflow-visible" 
               ref={searchRef}
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
@@ -529,10 +533,13 @@ const Header: React.FC<HeaderProps> = ({ onShowAuth, onShowProfile, isAuthentica
                     value={searchQuery}
                     onChange={(e) => handleSearchChange(e.target.value)}
                     placeholder="Rechercher..."
-                    className="w-full bg-black/70 border border-gray-600 rounded-l px-3 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 transition-all"
+                    className="w-full bg-black/70 border border-gray-600 rounded px-3 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 transition-all"
                     onFocus={() => {
                       setIsMobileSearchFocused(true);
-                      setShowSearchResults(true);
+                      // Show results if there's already a query
+                      if (searchQuery.trim()) {
+                        setShowSearchResults(true);
+                      }
                     }}
                     onBlur={() => {
                       // Ne ferme que si on ne clique pas dans le dropdown
@@ -549,24 +556,18 @@ const Header: React.FC<HeaderProps> = ({ onShowAuth, onShowProfile, isAuthentica
                     </div>
                   )}
                 </div>
-                <button
-                  type="submit"
-                  className="bg-red-600 border border-red-600 rounded-r px-4 py-3 text-white hover:bg-red-700 transition-colors flex items-center justify-center"
-                >
-                  <Search size={20} />
-                </button>
               </form>
             </div>
 
             {/* Mobile Search Results */}
             <AnimatePresence>
-              {showSearchResults && (searchResults.length > 0 || searchQuery.trim().length >= 1) && (
+              {showSearchResults && (searchResults.length > 0 || searchQuery.trim().length >= 1 || isSearching) && (
                 <motion.div
                   initial={{ opacity: 0, y: 5 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 5 }}
                   transition={{ duration: 0.15 }}
-                  className={`absolute top-full left-0 right-0 mt-2 bg-gray-900/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-gray-700/30 z-50 overflow-hidden ${
+                  className={`absolute top-full left-0 right-0 mt-2 bg-black/60 backdrop-blur-xl rounded-2xl shadow-2xl border border-gray-700/20 z-[60] overflow-hidden ${
                     isMobileSearchFocused ? 'max-h-96' : 'max-h-72'
                   }`}
                 >
@@ -622,7 +623,14 @@ const Header: React.FC<HeaderProps> = ({ onShowAuth, onShowProfile, isAuthentica
                         </div>
                       )}
                     </div>
-                  ) : searchQuery.trim().length >= 1 && !isSearching ? (
+                  ) : isSearching ? (
+                    <div className="p-6 text-center">
+                      <div className="mb-2">
+                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mx-auto"></div>
+                      </div>
+                      <p className="text-gray-400 text-sm">Recherche en cours...</p>
+                    </div>
+                  ) : searchQuery.trim().length >= 1 ? (
                     <div className="p-6 text-center">
                       <div className="mb-2">
                         <Search size={24} className="text-gray-500 mx-auto" />

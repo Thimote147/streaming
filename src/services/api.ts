@@ -1,7 +1,7 @@
 export interface MediaItem {
   id: string;
   title: string;
-  originalTitle: string;
+  originalTitle?: string;
   frenchTitle?: string;
   path: string;
   type: 'movie' | 'series' | 'music';
@@ -185,8 +185,8 @@ class StreamingAPI {
           type: 'movie',
           year: 2022,
           genre: 'Comedy',
-          description: 'Une comédie hilarante'
-          , originalTitle: "Comedy Film"
+          description: 'Une comédie hilarante',
+          originalTitle: "Comedy Film"
         }
       ],
       'Series': [

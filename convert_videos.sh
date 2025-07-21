@@ -160,7 +160,7 @@ echo -e "Qualité: ${YELLOW}$QUALITY${NC} (CRF: $CRF, Preset: $PRESET)"
 echo -e "Parallélisme: ${YELLOW}$PARALLEL_JOBS conversions simultanées${NC}"
 echo -e "Threads/conversion: ${YELLOW}$THREADS${NC}"
 echo -e "Audio: ${YELLOW}${AUDIO_BITRATE}k AAC stéréo${NC}"
-echo -e "Résolution: ${YELLOW}Minimum 1080p (upscale si nécessaire)${NC}"
+echo -e "Résolution: ${YELLOW}Originale préservée${NC}"
 
 if [[ "$DRY_RUN" == true ]]; then
     echo -e "Mode: ${YELLOW}Simulation${NC}"
@@ -254,13 +254,13 @@ get_recursive_file_list() {
             return 1
         fi
         
-        local all_files=$(ssh -i "$SSH_KEY" "$user_host" "find '$remote_path' -type f \( -iname '*.mkv' -o -iname '*.avi' \) 2>/dev/null")
+        local all_files=$(ssh -i "$SSH_KEY" "$user_host" "find '$remote_path' -type f \( -iname '*.mkv' -o -iname '*.avi' \) 2>/dev/null | sort")
         
         local unconverted_files=""
         local converted_files=""
         local total_found=0
         local already_converted=0
-        local files_processed=0
+        local files_to_process=0
         
         while IFS= read -r file; do
             [[ -z "$file" ]] && continue
@@ -273,15 +273,18 @@ get_recursive_file_list() {
                     converted_files+="$file"$'\n'
                 fi
             else
-                unconverted_files+="$file"$'\n'
-                ((files_processed++))
-                if [[ $max_files -gt 0 && $files_processed -ge $max_files ]]; then
+                if [[ $max_files -eq 0 || $files_to_process -lt $max_files ]]; then
+                    unconverted_files+="$file"$'\n'
+                    ((files_to_process++))
+                    echo -e "${YELLOW}⏳ $(basename "$file")${NC}" >&2
+                else
+                    echo -e "${BLUE}📌 Limite atteinte ($max_files fichiers), arrêt du scan${NC}" >&2
                     break
                 fi
             fi
         done <<< "$all_files"
         
-        echo -e "${BLUE}📊 Total: $total_found | Déjà convertis: $already_converted${NC}" >&2
+        echo -e "${BLUE}📊 Total trouvés: $total_found | Déjà convertis: $already_converted | À traiter: $files_to_process${NC}" >&2
         
         if [[ "$RESUME_MODE" == true ]]; then
             echo -n "$converted_files"
@@ -291,13 +294,13 @@ get_recursive_file_list() {
     else
         echo -e "${BLUE}🔍 Scan local récursif: $source_path${NC}" >&2
         
-        local all_files=$(find "$source_path" -type f \( -iname "*.mkv" -o -iname "*.avi" \) 2>/dev/null)
+        local all_files=$(find "$source_path" -type f \( -iname "*.mkv" -o -iname "*.avi" \) 2>/dev/null | sort)
         
         local unconverted_files=""
         local converted_files=""
         local total_found=0
         local already_converted=0
-        local files_processed=0
+        local files_to_process=0
         
         while IFS= read -r file; do
             [[ -z "$file" ]] && continue
@@ -310,15 +313,18 @@ get_recursive_file_list() {
                     converted_files+="$file"$'\n'
                 fi
             else
-                unconverted_files+="$file"$'\n'
-                ((files_processed++))
-                if [[ $max_files -gt 0 && $files_processed -ge $max_files ]]; then
+                if [[ $max_files -eq 0 || $files_to_process -lt $max_files ]]; then
+                    unconverted_files+="$file"$'\n'
+                    ((files_to_process++))
+                    echo -e "${YELLOW}⏳ $(basename "$file")${NC}" >&2
+                else
+                    echo -e "${BLUE}📌 Limite atteinte ($max_files fichiers), arrêt du scan${NC}" >&2
                     break
                 fi
             fi
         done <<< "$all_files"
         
-        echo -e "${BLUE}📊 Total: $total_found | Déjà convertis: $already_converted${NC}" >&2
+        echo -e "${BLUE}📊 Total trouvés: $total_found | Déjà convertis: $already_converted | À traiter: $files_to_process${NC}" >&2
         
         if [[ "$RESUME_MODE" == true ]]; then
             echo -n "$converted_files"
@@ -339,7 +345,7 @@ convert_file() {
     local dest_dir=$(dirname "$dest_file")
     mkdir -p "$dest_dir"
     
-    if [[ -f "$dest_file" ]]; then
+    if [[ -f "$dest_file" ]] && [[ "$FORCE_RECONVERT" != true ]]; then
         echo -e "${YELLOW}⏭️  [Job $job_id] Existe déjà: $filename${NC}"
         return 0
     fi
@@ -349,36 +355,19 @@ convert_file() {
         return 0
     fi
     
-    echo -e "${BLUE}🚀 [Job $job_id] Conversion TURBO: $filename${NC}"
+    echo -e "${BLUE}🚀 [Job $job_id] Début conversion: $filename${NC}"
     
     # Commande FFmpeg ultra-optimisée pour vitesse
     if [[ "$source_path" == ssh* ]]; then
         local ssh_part="${source_path#ssh }"
         local user_host="${ssh_part%:*}"
         
-        # Debug: afficher la commande SSH exacte
-        echo -e "${YELLOW}[Job $job_id] SSH: cat \"$src_file\"${NC}" >&2
+        echo -e "${YELLOW}[Job $job_id] Lecture SSH: $filename${NC}" >&2
         
-        # Test simple d'abord
-        echo -e "${YELLOW}[Job $job_id] Test de lecture SSH...${NC}" >&2
-        if ! ssh -i "$SSH_KEY" "$user_host" "head -c 1000 \"$src_file\"" >/dev/null 2>&1; then
-            echo -e "${RED}❌ [Job $job_id] Impossible de lire le fichier via SSH${NC}"
+        # Test de lecture SSH
+        if ! ssh -i "$SSH_KEY" "$user_host" "test -r \"$src_file\"" 2>/dev/null; then
+            echo -e "${RED}❌ [Job $job_id] Fichier non accessible via SSH: $filename${NC}"
             return 1
-        fi
-        
-        # Obtenir la durée totale du fichier pour le calcul de progression
-        echo -e "${BLUE}[Job $job_id] Analyse de la durée...${NC}" >&2
-        local duration_info=$(ssh -i "$SSH_KEY" "$user_host" "ffprobe -v quiet -show_entries format=duration -of csv=p=0 \"$src_file\"" 2>/dev/null)
-        local total_duration=${duration_info%.*}  # Enlever les décimales
-        
-        # Convertir en format lisible
-        local duration_text=""
-        if [[ -n "$total_duration" && "$total_duration" -gt 0 ]]; then
-            local hours=$((total_duration / 3600))
-            local minutes=$(((total_duration % 3600) / 60))
-            local seconds=$((total_duration % 60))
-            duration_text="${hours}h${minutes}m${seconds}s"
-            echo -e "${GREEN}[Job $job_id] Durée: ${duration_text} (${total_duration}s)${NC}" >&2
         fi
         
         # Obtenir la taille du fichier source
@@ -389,93 +378,61 @@ convert_file() {
             echo -e "${GREEN}[Job $job_id] Taille source: ${source_size_gb}GB${NC}" >&2
         fi
         
-        # Lancer un moniteur de progression en arrière-plan
-        {
-            local last_size=0
-            local start_time=$(date +%s)
-            
-            while [[ ! -f "$dest_file" ]]; do
-                sleep 2
-            done
-            
-            while kill -0 $ 2>/dev/null; do
-                if [[ -f "$dest_file" ]]; then
-                    local current_size=$(stat -f%z "$dest_file" 2>/dev/null || echo "0")
-                    local current_time=$(date +%s)
-                    local elapsed=$((current_time - start_time))
-                    
-                    if [[ $current_size -gt $last_size ]]; then
-                        local size_mb=$((current_size / 1024 / 1024))
-                        local speed_mb=$(( (current_size - last_size) / 1024 / 1024 / 5 ))
-                        
-                        # Calcul du temps restant et progression
-                        local progress_info=""
-                        local eta_info=""
-                        
-                        if [[ -n "$total_duration" && "$total_duration" -gt 0 ]]; then
-                            # Estimation basée sur le temps (plus précise)
-                            local progress_pct=$((elapsed * 100 / total_duration))
-                            if [[ $progress_pct -gt 100 ]]; then progress_pct=100; fi
-                            
-                            # Estimation du temps restant
-                            if [[ $progress_pct -gt 0 && $progress_pct -lt 100 ]]; then
-                                local total_estimated_time=$((elapsed * 100 / progress_pct))
-                                local eta_seconds=$((total_estimated_time - elapsed))
-                                local eta_min=$((eta_seconds / 60))
-                                local eta_sec=$((eta_seconds % 60))
-                                eta_info=" | ETA: ${eta_min}m${eta_sec}s"
-                            fi
-                            
-                            progress_info=" | ${progress_pct}%"
-                        fi
-                        
-                        # Format temps écoulé
-                        local elapsed_min=$((elapsed / 60))
-                        local elapsed_sec=$((elapsed % 60))
-                        
-                        echo -e "${BLUE}[Job $job_id] ${size_mb}MB | ${speed_mb}MB/s | ${elapsed_min}m${elapsed_sec}s${progress_info}${eta_info}${NC}" >&2
-                        last_size=$current_size
-                    fi
-                fi
-                sleep 5
-            done
-        } &
-        local monitor_pid=$!
+        # Conversion SSH sans timeout (macOS compatible)
+        local conversion_start=$(date +%s)
         
-        # Commande FFmpeg avec progress
-        ssh -i "$SSH_KEY" "$user_host" "cat \"$src_file\"" | \
-        ffmpeg -hide_banner -loglevel warning -stats \
-               -f matroska -i pipe:0 \
-               -c:v libx264 -preset "$PRESET" -crf "$CRF" \
-               -c:a aac -b:a "${AUDIO_BITRATE}k" -ac 2 \
-               -threads "$THREADS" \
-               -vf "scale=-2:max(1080\\,ih)" \
-               -y "$dest_file"
-        
-        # Tuer le moniteur
-        kill $monitor_pid 2>/dev/null || true
+        if ssh -i "$SSH_KEY" "$user_host" "cat \"$src_file\"" | \
+           ffmpeg -hide_banner -loglevel error -stats \
+                   -f matroska -i pipe:0 \
+                   -c:v libx264 -preset "$PRESET" -crf "$CRF" \
+                   -c:a aac -b:a "${AUDIO_BITRATE}k" -ac 2 \
+                   -threads "$THREADS" \
+                   -movflags +faststart \
+                   -y "$dest_file"; then
+            
+            local conversion_end=$(date +%s)
+            local conversion_duration=$((conversion_end - conversion_start))
+            local dest_size=$(du -h "$dest_file" 2>/dev/null | cut -f1 || echo "?")
+            local conv_min=$((conversion_duration / 60))
+            local conv_sec=$((conversion_duration % 60))
+            
+            echo -e "${GREEN}✅ [Job $job_id] Terminé: $(basename "$dest_file") (${dest_size}) - ${conv_min}m${conv_sec}s${NC}"
+            return 0
+        else
+            local exit_code=$?
+            echo -e "${RED}❌ [Job $job_id] Erreur conversion (code: $exit_code): $filename${NC}"
+            [[ -f "$dest_file" ]] && rm -f "$dest_file"
+            return 1
+        fi
         
     else
-        ffmpeg -hide_banner -loglevel error \
+        # Conversion locale sans timeout (macOS compatible)
+        local conversion_start=$(date +%s)
+        
+        if ffmpeg -hide_banner -loglevel error -stats \
                -i "$src_file" \
                -c:v libx264 -preset "$PRESET" -crf "$CRF" \
                -tune zerolatency -x264-params "$X264_PARAMS" \
                -c:a aac -b:a "${AUDIO_BITRATE}k" -ac 2 -ar 48000 \
                -threads "$THREADS" \
-               -vf "scale=-2:max(1080\\,ih):flags=fast_bilinear,format=yuv420p" \
-               -movflags +faststart+frag_keyframe+empty_moov \
+               -movflags +faststart \
                -fflags +genpts -avoid_negative_ts make_zero \
-               -y "$dest_file" < /dev/null
-    fi
-    
-    if [[ $? -eq 0 ]]; then
-        local dest_size=$(du -h "$dest_file" | cut -f1)
-        echo -e "${GREEN}✅ [Job $job_id] Terminé: $(basename "$dest_file") (${dest_size})${NC}"
-        return 0
-    else
-        echo -e "${RED}❌ [Job $job_id] Erreur: $filename${NC}"
-        [[ -f "$dest_file" ]] && rm -f "$dest_file"
-        return 1
+               -y "$dest_file" < /dev/null; then
+            
+            local conversion_end=$(date +%s)
+            local conversion_duration=$((conversion_end - conversion_start))
+            local dest_size=$(du -h "$dest_file" 2>/dev/null | cut -f1 || echo "?")
+            local conv_min=$((conversion_duration / 60))
+            local conv_sec=$((conversion_duration % 60))
+            
+            echo -e "${GREEN}✅ [Job $job_id] Terminé: $(basename "$dest_file") (${dest_size}) - ${conv_min}m${conv_sec}s${NC}"
+            return 0
+        else
+            local exit_code=$?
+            echo -e "${RED}❌ [Job $job_id] Erreur conversion (code: $exit_code): $filename${NC}"
+            [[ -f "$dest_file" ]] && rm -f "$dest_file"
+            return 1
+        fi
     fi
 }
 
@@ -485,15 +442,15 @@ echo -e "${BLUE}🔍 Recherche des fichiers...${NC}"
 file_list=$(get_recursive_file_list "$SOURCE_PATH" "$MAX_FILES")
 
 # Nettoyer la liste des fichiers en supprimant les lignes vides
-file_list=$(echo "$file_list" | grep -v '^[[:space:]]*$')
+file_list=$(echo "$file_list" | grep -v '^[[:space:]]*$' | head -n "$MAX_FILES")
 
 if [[ -z "$file_list" ]]; then
-    echo -e "${YELLOW}⚠️  Aucun fichier trouvé${NC}"
+    echo -e "${YELLOW}⚠️  Aucun fichier trouvé ou tous déjà convertis${NC}"
     exit 0
 fi
 
 file_count=$(echo "$file_list" | wc -l)
-echo -e "${GREEN}📁 $file_count fichier(s) trouvé(s)${NC}"
+echo -e "${GREEN}📁 $file_count fichier(s) trouvé(s) pour traitement${NC}"
 
 if [[ "$RESUME_MODE" == true ]]; then
     echo -e "${YELLOW}📋 Fichiers déjà convertis:${NC}"
@@ -512,7 +469,7 @@ if [[ $file_count -gt 20 ]]; then
 fi
 
 echo ""
-echo -e "${GREEN}📊 Total: $file_count fichier(s)${NC}"
+echo -e "${GREEN}📊 Total pour traitement: $file_count fichier(s)${NC}"
 
 if [[ "$DRY_RUN" == true ]]; then
     echo -e "${YELLOW}🔍 Mode simulation${NC}"
@@ -543,16 +500,17 @@ total_converted=0
 total_failed=0
 start_time=$(date +%s)
 
-# Fonction de traitement parallèle compatible avec Bash 3+
+# Fonction de traitement parallèle
 process_parallel() {
     local temp_file=$(mktemp)
     echo "$file_list" > "$temp_file"
     
     local pids=()
     local job_counter=0
+    local files_processed=0
     
-    # Lire le fichier ligne par ligne
-    while IFS= read -r file; do
+    # Lecture ligne par ligne avec compteur
+    while IFS= read -r file && [[ $files_processed -lt $file_count ]]; do
         [[ -z "$file" ]] && continue
         
         # Attendre qu'un slot se libère
@@ -563,24 +521,41 @@ process_parallel() {
                     new_pids+=("$pid")
                 else
                     wait "$pid"
-                    [[ $? -eq 0 ]] && ((total_converted++)) || ((total_failed++))
+                    local exit_status=$?
+                    if [[ $exit_status -eq 0 ]]; then 
+                        ((total_converted++))
+                        echo -e "${GREEN}📈 Progression: $total_converted/$file_count convertis${NC}" >&2
+                    else 
+                        ((total_failed++))
+                        echo -e "${RED}📉 Échec: $total_failed (total: $((total_converted + total_failed))/$file_count)${NC}" >&2
+                    fi
                 fi
             done
             pids=("${new_pids[@]}")
-            sleep 0.1
+            sleep 0.5
         done
         
         # Lancer une nouvelle conversion
         ((job_counter++))
+        ((files_processed++))
+        echo -e "${BLUE}🎬 Lancement job $job_counter: $(basename "$file") ($files_processed/$file_count)${NC}" >&2
         convert_file "$file" "$SOURCE_PATH" "$job_counter" &
         pids+=($!)
         
     done < "$temp_file"
     
-    # Attendre la fin de tous les jobs
+    # Attendre la fin de tous les jobs restants
+    echo -e "${BLUE}⏳ Attente de la fin des dernières conversions...${NC}" >&2
     for pid in "${pids[@]}"; do
         wait "$pid"
-        [[ $? -eq 0 ]] && ((total_converted++)) || ((total_failed++))
+        local exit_status=$?
+        if [[ $exit_status -eq 0 ]]; then 
+            ((total_converted++))
+            echo -e "${GREEN}📈 Progression finale: $total_converted/$file_count convertis${NC}" >&2
+        else 
+            ((total_failed++))
+            echo -e "${RED}📉 Échec final: $total_failed (total: $((total_converted + total_failed))/$file_count)${NC}" >&2
+        fi
     done
     
     rm -f "$temp_file"
@@ -602,7 +577,10 @@ if [[ "$DRY_RUN" == true ]]; then
 else
     echo -e "${GREEN}✅ Convertis: $total_converted${NC}"
     echo -e "${RED}❌ Échecs: $total_failed${NC}"
-    echo -e "⚡ Vitesse: $((total_converted * 60 / (duration + 1))) fichiers/min${NC}"
+    echo -e "${BLUE}📊 Total traité: $((total_converted + total_failed))/$file_count${NC}"
+    if [[ $duration -gt 0 ]]; then
+        echo -e "⚡ Vitesse: $((total_converted * 60 / duration)) fichiers/min${NC}"
+    fi
     echo -e "⏱️  Durée: ${minutes}m ${seconds}s${NC}"
 fi
 echo -e "📁 Destination: $DEST_PATH"
