@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { streamingAPI } from '../services/api';
+import { cleanTitleForUrl } from '../utils/urlUtils';
 import type { MediaItem } from '../services/api';
 
 interface HeaderProps {
@@ -196,6 +197,7 @@ const Header: React.FC<HeaderProps> = ({ onShowAuth, onShowProfile, isAuthentica
     return () => window.removeEventListener('resize', checkScreenSize);
   }, []);
 
+
   // Handle search result selection
   const handleResultSelect = (media: MediaItem) => {
     setShowSearchResults(false);
@@ -207,13 +209,15 @@ const Header: React.FC<HeaderProps> = ({ onShowAuth, onShowProfile, isAuthentica
       const route = media.type === 'series' ? 'series' : 'films';
       // Use the extracted series name, not the full episode title
       const seriesName = extractSeriesName(media.episodes[0].title);
-      navigate(`/${route}/${encodeURIComponent(seriesName)}`);
+      const cleanSeriesName = cleanTitleForUrl(seriesName);
+      navigate(`/${route}/${cleanSeriesName}`);
     } else {
       // For individual items, use the original title (not the french one)
       const route = media.type === 'movie' ? 'films' : media.type === 'series' ? 'series' : 'films';
       // Try to use the original title from search results, fallback to current title
       const originalTitle = (media as MediaItem & { originalTitle?: string }).originalTitle || media.title;
-      navigate(`/${route}/${encodeURIComponent(originalTitle)}`);
+      const cleanTitle = cleanTitleForUrl(originalTitle);
+      navigate(`/${route}/${cleanTitle}`);
     }
   };
 
@@ -226,9 +230,11 @@ const Header: React.FC<HeaderProps> = ({ onShowAuth, onShowProfile, isAuthentica
     
     // For grouped series, play the first episode
     if (media.isGroup && media.episodes && media.episodes.length > 0) {
+      console.log('Playing first episode of group:', media.episodes[0].id);
       navigate(`/player/${encodeURIComponent(media.episodes[0].id)}`);
     } else {
       // For individual media items, play directly
+      console.log('Playing individual media:', media.id);
       navigate(`/player/${encodeURIComponent(media.id)}`);
     }
   };

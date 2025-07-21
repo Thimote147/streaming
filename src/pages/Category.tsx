@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useParams, useNavigate } from 'react-router-dom';
 import MediaRow from '../components/MediaRow';
 import { streamingAPI } from '../services/api';
+import { cleanTitleForUrl } from '../utils/urlUtils';
 import type { MediaItem } from '../services/api';
 
 const Category: React.FC = () => {
@@ -36,7 +37,8 @@ const Category: React.FC = () => {
   const handleMoreInfo = (media: MediaItem) => {
     const route = media.type === 'movie' ? 'films' : media.type === 'series' ? 'series' : 'films';
     const title = media.frenchTitle || media.title;
-    navigate(`/${route}/${encodeURIComponent(title)}`);
+    const cleanTitle = cleanTitleForUrl(title);
+    navigate(`/${route}/${cleanTitle}`);
   };
 
   const handleAddToList = (media: MediaItem) => {

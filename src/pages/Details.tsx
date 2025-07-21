@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import MediaDetails from '../components/MediaDetails';
 import { streamingAPI } from '../services/api';
+import { cleanTitleForUrl } from '../utils/urlUtils';
 import type { MediaItem } from '../services/api';
 
 const Details: React.FC = () => {
@@ -12,18 +13,53 @@ const Details: React.FC = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
+    const generateTitleVariants = (titleParam: string): string[] => {
+      const variants = [titleParam];
+      
+      // Si le titre contient des underscores, créer une variante avec des espaces
+      if (titleParam.includes('_')) {
+        const spaceVariant = titleParam.replace(/_/g, ' ');
+        variants.push(spaceVariant);
+        
+        // Créer une variante avec capitalisation appropriée
+        const capitalizedVariant = spaceVariant
+          .split(' ')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+          .join(' ');
+        variants.push(capitalizedVariant);
+      }
+      
+      // Si le titre contient des espaces, créer une variante avec des underscores
+      if (titleParam.includes(' ')) {
+        const underscoreVariant = titleParam.toLowerCase().replace(/\s+/g, '_');
+        variants.push(underscoreVariant);
+      }
+      
+      return variants;
+    };
+
     const loadMediaByTitle = async (mediaTitle: string) => {
       try {
         setIsLoading(true);
         // Search through all categories to find media by title
         const categories = await streamingAPI.fetchCategories();
         const allItems = categories.flatMap(cat => cat.items);
-        const foundMedia = allItems.find(item => 
-          item.title === mediaTitle || 
-          item.frenchTitle === mediaTitle ||
-          item.title.toLowerCase() === mediaTitle.toLowerCase() ||
-          (item.frenchTitle && item.frenchTitle.toLowerCase() === mediaTitle.toLowerCase())
-        );
+        
+        // Générer toutes les variantes possibles du titre
+        const titleVariants = generateTitleVariants(mediaTitle);
+        
+        const foundMedia = allItems.find(item => {
+          // Tester chaque variante contre le titre et le titre français
+          return titleVariants.some(variant => 
+            item.title === variant || 
+            item.frenchTitle === variant ||
+            item.title.toLowerCase() === variant.toLowerCase() ||
+            (item.frenchTitle && item.frenchTitle.toLowerCase() === variant.toLowerCase()) ||
+            // Tester aussi la conversion inverse (titre du média vers underscore)
+            item.title.toLowerCase().replace(/\s+/g, '_') === variant.toLowerCase() ||
+            (item.frenchTitle && item.frenchTitle.toLowerCase().replace(/\s+/g, '_') === variant.toLowerCase())
+          );
+        });
         
         if (foundMedia) {
           setMedia(foundMedia);
@@ -45,7 +81,47 @@ const Details: React.FC = () => {
 
 
   const handlePlay = (media: MediaItem) => {
-    navigate(`/player/${encodeURIComponent(media.id)}`);
+    console.log('🎬 handlePlay appelée');
+    console.log('📽️ ID du média reçu:', media.id);
+    
+    let navigationUrl: string;
+    
+    // Vérifier si le média a une propriété sequelNumber (film de saga)
+    if (media.sequelNumber && media.type === 'movie') {
+      console.log('🎭 Détection d\'un film de saga avec sequelNumber:', media.sequelNumber);
+      
+      // Extraire le nom de base de la série (enlever le numéro à la fin)
+      const baseTitle = media.title
+        .replace(/\s+\d+$/g, '') // Enlever les nombres à la fin (ex: "John Wick 4" -> "John Wick")
+        .replace(/\s+(I{1,4}|V|VI{1,3}|IX|X)$/g, ''); // Enlever les chiffres romains à la fin
+      
+      const baseName = cleanTitleForUrl(baseTitle);
+      
+      // Générer l'URL au format /player/films/nom_serie/numero
+      navigationUrl = `/player/films/${baseName}/${media.sequelNumber}`;
+      console.log('🔗 URL de saga générée:', navigationUrl);
+      console.log('📝 Nom de base extrait:', baseName);
+    } else if (media.sequelNumber && media.type === 'series') {
+      // Cas des séries avec sequelNumber
+      console.log('📺 Détection d\'une série avec sequelNumber:', media.sequelNumber);
+      
+      const baseTitle = media.title
+        .replace(/\s+\d+$/g, '')
+        .replace(/\s+(I{1,4}|V|VI{1,3}|IX|X)$/g, '');
+      
+      const baseName = cleanTitleForUrl(baseTitle);
+      
+      navigationUrl = `/player/series/${baseName}/${media.sequelNumber}`;
+      console.log('🔗 URL de série générée:', navigationUrl);
+      console.log('📝 Nom de base extrait:', baseName);
+    } else {
+      // Utiliser l'ancien format en fallback
+      navigationUrl = `/player/${encodeURIComponent(media.id)}`;
+      console.log('🔗 URL classique utilisée (fallback):', navigationUrl);
+    }
+    
+    console.log('🚀 Navigation en cours...');
+    navigate(navigationUrl);
   };
 
   const handleClose = () => {

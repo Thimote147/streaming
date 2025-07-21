@@ -5,6 +5,7 @@ import Hero from '../components/Hero';
 import MediaRow from '../components/MediaRow';
 import ContinueWatching from '../components/WatchProgress/ContinueWatching';
 import { streamingAPI } from '../services/api';
+import { cleanTitleForUrl } from '../utils/urlUtils';
 import type { MediaItem, MediaCategory } from '../services/api';
 
 const Home: React.FC = () => {
@@ -40,7 +41,8 @@ const Home: React.FC = () => {
   const handleMoreInfo = (media: MediaItem) => {
     const route = media.type === 'movie' ? 'films' : media.type === 'series' ? 'series' : 'films';
     const title = media.frenchTitle || media.title;
-    navigate(`/${route}/${encodeURIComponent(title)}`);
+    const cleanTitle = cleanTitleForUrl(title);
+    navigate(`/${route}/${cleanTitle}`);
   };
 
   const handleAddToList = (media: MediaItem) => {

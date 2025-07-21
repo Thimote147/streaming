@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import MediaRow from '../components/MediaRow';
 import { streamingAPI } from '../services/api';
+import { cleanTitleForUrl } from '../utils/urlUtils';
 import type { MediaItem } from '../services/api';
 
 const Search: React.FC = () => {
@@ -42,7 +43,8 @@ const Search: React.FC = () => {
   const handleMoreInfo = (media: MediaItem) => {
     const route = media.type === 'movie' ? 'films' : media.type === 'series' ? 'series' : 'films';
     const title = media.frenchTitle || media.title;
-    navigate(`/${route}/${encodeURIComponent(title)}`);
+    const cleanTitle = cleanTitleForUrl(title);
+    navigate(`/${route}/${cleanTitle}`);
   };
 
   const handleAddToList = (media: MediaItem) => {
