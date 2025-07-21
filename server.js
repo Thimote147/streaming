@@ -112,7 +112,7 @@ app.get('/api/categories', async (_req, res) => {
           {
             id: '1',
             title: 'Action Movie',
-            path: '/Films/action_movie.mp4',
+            path: '/films/action_movie.mp4',
             type: 'movie',
             year: 2023,
             genre: 'Action',
@@ -127,7 +127,7 @@ app.get('/api/categories', async (_req, res) => {
           {
             id: '2',
             title: 'Drama Series',
-            path: '/Series/drama_series_s01e01.mp4',
+            path: '/series/drama_series_s01e01.mp4',
             type: 'series',
             year: 2023,
             genre: 'Drama',
@@ -142,7 +142,7 @@ app.get('/api/categories', async (_req, res) => {
           {
             id: '3',
             title: 'Pop Album',
-            path: '/Musiques/pop_album.mp3',
+            path: '/musiques/pop_album.mp3',
             type: 'music',
             year: 2023,
             genre: 'Pop',

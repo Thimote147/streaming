@@ -171,7 +171,7 @@ class StreamingAPI {
         {
           id: '1',
           title: 'Action Movie',
-          path: '/Films/action_movie.mp4',
+          path: '/films/action_movie.mp4',
           type: 'movie',
           year: 2023,
           genre: 'Action',
@@ -181,7 +181,7 @@ class StreamingAPI {
         {
           id: '2',
           title: 'Comedy Film',
-          path: '/Films/comedy_film.mp4',
+          path: '/films/comedy_film.mp4',
           type: 'movie',
           year: 2022,
           genre: 'Comedy',
@@ -193,7 +193,7 @@ class StreamingAPI {
         {
           id: '3',
           title: 'Drama Series',
-          path: '/Series/drama_series_s01e01.mp4',
+          path: '/series/drama_series_s01e01.mp4',
           type: 'series',
           year: 2023,
           genre: 'Drama',
@@ -205,7 +205,7 @@ class StreamingAPI {
         {
           id: '4',
           title: 'Pop Album',
-          path: '/Musiques/pop_album.mp3',
+          path: '/musiques/pop_album.mp3',
           type: 'music',
           year: 2023,
           genre: 'Pop',
