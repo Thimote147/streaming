@@ -31,11 +31,54 @@ const Category: React.FC = () => {
   };
 
   const handlePlay = (media: MediaItem) => {
-    if (media.type === 'music') {
-      navigate(`/player/musiques/${media.id}`);
-    } else {
-      navigate(`/player/${encodeURIComponent(media.id)}`);
+    let navigationUrl: string;
+    
+    // 1. Détecter si c'est un épisode (seasonNumber et episodeNumber existent)
+    if (media.seasonNumber && media.episodeNumber) {
+      const seriesName = media.seriesTitle || media.title;
+      const cleanSeriesName = seriesName.toLowerCase()
+        .replace(/[^a-z0-9\s]/g, '')
+        .replace(/\s+/g, '_');
+      
+      const seasonFormatted = media.seasonNumber.toString().padStart(2, '0');
+      const episodeFormatted = media.episodeNumber.toString().padStart(2, '0');
+      
+      navigationUrl = `/player/series/${cleanSeriesName}/s${seasonFormatted}/e${episodeFormatted}`;
+    } 
+    // 2. Film de saga avec sequelNumber
+    else if (media.sequelNumber && media.type === 'movie') {
+      const baseTitle = media.title
+        .replace(/\s+\d+$/g, '')
+        .replace(/\s+(I{1,4}|V|VI{1,3}|IX|X)$/g, '');
+      
+      const baseName = baseTitle.toLowerCase()
+        .replace(/[^a-z0-9\s]/g, '')
+        .replace(/\s+/g, '_');
+      
+      navigationUrl = `/player/films/${baseName}/${media.sequelNumber}`;
+    } 
+    // 3. Série avec sequelNumber
+    else if (media.sequelNumber && media.type === 'series') {
+      const baseTitle = media.title
+        .replace(/\s+\d+$/g, '')
+        .replace(/\s+(I{1,4}|V|VI{1,3}|IX|X)$/g, '');
+      
+      const baseName = baseTitle.toLowerCase()
+        .replace(/[^a-z0-9\s]/g, '')
+        .replace(/\s+/g, '_');
+      
+      navigationUrl = `/player/series/${baseName}/${media.sequelNumber}`;
+    } 
+    // 4. Fichier musical
+    else if (media.type === 'music') {
+      navigationUrl = `/player/musiques/${media.id}`;
+    } 
+    // 5. Fallback
+    else {
+      navigationUrl = `/player/${encodeURIComponent(media.id)}`;
     }
+    
+    navigate(navigationUrl);
   };
 
   const handleMoreInfo = (media: MediaItem) => {

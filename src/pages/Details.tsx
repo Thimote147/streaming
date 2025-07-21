@@ -4,13 +4,17 @@ import { AnimatePresence } from 'framer-motion';
 import MediaDetails from '../components/MediaDetails';
 import { streamingAPI } from '../services/api';
 import { cleanTitleForUrl } from '../utils/urlUtils';
+import { useWatchProgress } from '../hooks/useWatchProgress';
 import type { MediaItem } from '../services/api';
+import type { WatchProgress } from '../lib/supabase';
 
 const Details: React.FC = () => {
   const { title } = useParams<{ title: string }>();
   const [media, setMedia] = useState<MediaItem | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [watchProgress, setWatchProgress] = useState<WatchProgress | null>(null);
   const navigate = useNavigate();
+  const { recentProgress } = useWatchProgress();
 
   useEffect(() => {
     const generateTitleVariants = (titleParam: string): string[] => {
@@ -78,6 +82,37 @@ const Details: React.FC = () => {
       loadMediaByTitle(decodeURIComponent(title));
     }
   }, [title, navigate]);
+
+  // Effet pour détecter le progrès de visionnage quand le média et les données de progrès sont chargés
+  useEffect(() => {
+    if (media && recentProgress) {
+      // Chercher le progrès pour ce média
+      const progress = recentProgress.find(p => {
+        // Essayer de matcher par titre du média
+        if (p.movie_title?.toLowerCase() === media.title.toLowerCase()) {
+          return true;
+        }
+        
+        // Essayer de matcher par path si disponible
+        if (media.path && p.movie_path?.includes(media.path)) {
+          return true;
+        }
+        
+        // Pour les médias avec ID, essayer de matcher par nom de fichier
+        if (media.id) {
+          const fileName = media.id.replace(/^(film_|series_|music_)/, '').replace(/_\w{6}$/, '').replace(/_/g, ' ');
+          if (p.movie_title?.toLowerCase().includes(fileName.toLowerCase()) || 
+              fileName.toLowerCase().includes(p.movie_title?.toLowerCase() || '')) {
+            return true;
+          }
+        }
+        
+        return false;
+      });
+      
+      setWatchProgress(progress || null);
+    }
+  }, [media, recentProgress]);
 
 
   const handlePlay = (media: MediaItem) => {
@@ -179,6 +214,7 @@ const Details: React.FC = () => {
         onPlay={handlePlay}
         onClose={handleClose}
         onAddToList={handleAddToList}
+        watchProgress={watchProgress}
       />
     </AnimatePresence>
   );

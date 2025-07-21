@@ -43,7 +43,7 @@ const Header: React.FC<HeaderProps> = ({ onShowAuth, onShowProfile, isAuthentica
     }
     debounceTimeoutRef.current = setTimeout(() => {
       performSearch(query);
-    }, 300); // 300ms delay
+    }, 600); // 600ms delay for better performance
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -228,18 +228,74 @@ const Header: React.FC<HeaderProps> = ({ onShowAuth, onShowProfile, isAuthentica
     setSearchQuery('');
     setIsSearchOpen(false);
     
+    let navigationUrl: string;
+    
     // For grouped series, play the first episode
     if (media.isGroup && media.episodes && media.episodes.length > 0) {
-      navigate(`/player/${encodeURIComponent(media.episodes[0].id)}`);
-    } else {
-      // For music files, use clean URLs
-      if (media.type === 'music') {
-        navigate(`/player/musiques/${media.id}`);
+      const firstEpisode = media.episodes[0];
+      
+      // Use modern URL structure for first episode if possible
+      if (firstEpisode.seasonNumber && firstEpisode.episodeNumber) {
+        const seriesName = firstEpisode.seriesTitle || firstEpisode.title;
+        const cleanSeriesName = seriesName.toLowerCase()
+          .replace(/[^a-z0-9\s]/g, '')
+          .replace(/\s+/g, '_');
+        
+        const seasonFormatted = firstEpisode.seasonNumber.toString().padStart(2, '0');
+        const episodeFormatted = firstEpisode.episodeNumber.toString().padStart(2, '0');
+        
+        navigationUrl = `/player/series/${cleanSeriesName}/s${seasonFormatted}/e${episodeFormatted}`;
       } else {
-        // For individual video media items, play directly
-        navigate(`/player/${encodeURIComponent(media.id)}`);
+        navigationUrl = `/player/${encodeURIComponent(firstEpisode.id)}`;
+      }
+    } else {
+      // 1. Détecter si c'est un épisode (seasonNumber et episodeNumber existent)
+      if (media.seasonNumber && media.episodeNumber) {
+        const seriesName = media.seriesTitle || media.title;
+        const cleanSeriesName = seriesName.toLowerCase()
+          .replace(/[^a-z0-9\s]/g, '')
+          .replace(/\s+/g, '_');
+        
+        const seasonFormatted = media.seasonNumber.toString().padStart(2, '0');
+        const episodeFormatted = media.episodeNumber.toString().padStart(2, '0');
+        
+        navigationUrl = `/player/series/${cleanSeriesName}/s${seasonFormatted}/e${episodeFormatted}`;
+      } 
+      // 2. Film de saga avec sequelNumber
+      else if (media.sequelNumber && media.type === 'movie') {
+        const baseTitle = media.title
+          .replace(/\s+\d+$/g, '')
+          .replace(/\s+(I{1,4}|V|VI{1,3}|IX|X)$/g, '');
+        
+        const baseName = baseTitle.toLowerCase()
+          .replace(/[^a-z0-9\s]/g, '')
+          .replace(/\s+/g, '_');
+        
+        navigationUrl = `/player/films/${baseName}/${media.sequelNumber}`;
+      } 
+      // 3. Série avec sequelNumber
+      else if (media.sequelNumber && media.type === 'series') {
+        const baseTitle = media.title
+          .replace(/\s+\d+$/g, '')
+          .replace(/\s+(I{1,4}|V|VI{1,3}|IX|X)$/g, '');
+        
+        const baseName = baseTitle.toLowerCase()
+          .replace(/[^a-z0-9\s]/g, '')
+          .replace(/\s+/g, '_');
+        
+        navigationUrl = `/player/series/${baseName}/${media.sequelNumber}`;
+      } 
+      // 4. Fichier musical
+      else if (media.type === 'music') {
+        navigationUrl = `/player/musiques/${media.id}`;
+      } 
+      // 5. Fallback
+      else {
+        navigationUrl = `/player/${encodeURIComponent(media.id)}`;
       }
     }
+    
+    navigate(navigationUrl);
   };
 
   // Handle "see all results"

@@ -25,6 +25,12 @@ console.log('MEDIA_PATH:', MEDIA_PATH);
 console.log('TMDB_API_KEY configured:', !!TMDB_API_KEY);
 console.log('TMDB_API_KEY length:', TMDB_API_KEY ? TMDB_API_KEY.length : 0);
 
+// Performance caching
+const sshCache = new Map();
+const tmdbCache = new Map();
+const SSH_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const TMDB_CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'dist')));
 
@@ -45,8 +51,16 @@ app.use((req, res, next) => {
   }
 });
 
-// Helper function to execute SSH commands
+// Helper function to execute SSH commands with caching
 const executeSSH = (command) => {
+  const cacheKey = crypto.createHash('md5').update(command).digest('hex');
+  const cached = sshCache.get(cacheKey);
+  
+  if (cached && Date.now() - cached.timestamp < SSH_CACHE_TTL) {
+    console.log('SSH Cache hit:', cacheKey.slice(0, 8));
+    return Promise.resolve(cached.data);
+  }
+  
   return new Promise((resolve, reject) => {
     exec(command, { timeout: 10000 }, (error, stdout, stderr) => {
       if (error) {
@@ -57,6 +71,13 @@ const executeSSH = (command) => {
       if (stderr) {
         console.error(`SSH Stderr: ${stderr}`);
       }
+      
+      // Cache the result
+      sshCache.set(cacheKey, {
+        data: stdout,
+        timestamp: Date.now()
+      });
+      
       resolve(stdout);
     });
   });
@@ -186,7 +207,7 @@ app.get('/api/search', async (req, res) => {
       const execAsync = promisify(exec);
       
       try {
-        const findCommand = `find "${MEDIA_PATH}" -type f \\( -name '*.mp4' -o -name '*.mp3' \\) | head -100`;
+        const findCommand = `find "${MEDIA_PATH}" -type f \\( -name '*.mp4' -o -name '*.mp3' \\) | head -200`;
         console.log('Executing find command:', findCommand);
         const { stdout } = await execAsync(findCommand);
         files = stdout.split('\n').filter(line => line.trim());
@@ -703,9 +724,16 @@ const extractMusicMetadata = async (filePath) => {
   }
 };
 
-// Helper function to fetch movie data from TMDB
+// Helper function to fetch movie data from TMDB with caching
 const fetchMovieDataFromTMDB = async (title, year, type) => {
   if (!TMDB_API_KEY) return null;
+  
+  const cacheKey = `${title}_${year || 'no-year'}_${type}`;
+  const cached = tmdbCache.get(cacheKey);
+  
+  if (cached && Date.now() - cached.timestamp < TMDB_CACHE_TTL) {
+    return cached.data;
+  }
   
   try {
     const mediaType = type === 'series' ? 'tv' : 'movie';
@@ -724,12 +752,20 @@ const fetchMovieDataFromTMDB = async (title, year, type) => {
     const result = data.results[0];
     const titleField = mediaType === 'tv' ? 'name' : 'title';
     
-    return {
+    const movieData = {
       poster: result.poster_path ? `https://image.tmdb.org/t/p/w500${result.poster_path}` : null,
       backdrop: result.backdrop_path ? `https://image.tmdb.org/t/p/w1280${result.backdrop_path}` : null,
       frenchTitle: result[titleField] || null,
       frenchDescription: result.overview || null
     };
+    
+    // Cache the result
+    tmdbCache.set(cacheKey, {
+      data: movieData,
+      timestamp: Date.now()
+    });
+    
+    return movieData;
   } catch (error) {
     console.error('Error fetching TMDB data:', error);
     return null;

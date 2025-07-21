@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
+import { PlayerProvider } from './contexts/PlayerContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Home from './pages/Home';
 import Category from './pages/Category';
@@ -10,10 +11,13 @@ import Details from './pages/Details';
 import NotFound from './pages/NotFound';
 import AuthModal from './components/Auth/AuthModal';
 import UserProfile from './components/Profile/UserProfile';
+import MiniPlayer from './components/MiniPlayer';
+import { usePlayer } from './utils/usePlayer';
 
-function App() {
+const AppContent = () => {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const { currentMedia, isMinimized, playerState, closePlayer, maximizePlayer, playPause, setVolume, seek, toggleMute } = usePlayer();
 
   return (
     <AuthProvider>
@@ -115,8 +119,37 @@ function App() {
             isOpen={showProfileModal}
             onClose={() => setShowProfileModal(false)}
           />
+          
+          {/* Global Mini Player */}
+          {currentMedia && isMinimized && (
+            <MiniPlayer
+              media={currentMedia}
+              isVisible={isMinimized}
+              onClose={closePlayer}
+              onMaximize={maximizePlayer}
+              currentTime={playerState.currentTime}
+              duration={playerState.duration}
+              isPlaying={playerState.isPlaying}
+              volume={playerState.volume}
+              isMuted={playerState.isMuted}
+              onPlayPause={playPause}
+              onVolumeChange={setVolume}
+              onSeek={seek}
+              onToggleMute={toggleMute}
+            />
+          )}
         </div>
       </Router>
+    </AuthProvider>
+  );
+};
+
+function App() {
+  return (
+    <AuthProvider>
+      <PlayerProvider>
+        <AppContent />
+      </PlayerProvider>
     </AuthProvider>
   );
 }

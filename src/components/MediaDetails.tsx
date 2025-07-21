@@ -3,19 +3,22 @@ import { motion } from 'framer-motion';
 import { Play, Plus, Share, ArrowLeft, Star, Calendar } from 'lucide-react';
 import type { MediaItem } from '../services/api';
 import { useMovieData } from '../hooks/useMovieData';
+import type { WatchProgress } from '../lib/supabase';
 
 interface MediaDetailsProps {
   media: MediaItem;
   onPlay: (media: MediaItem) => void;
   onClose: () => void;
   onAddToList?: (media: MediaItem) => void;
+  watchProgress?: WatchProgress | null;
 }
 
 const MediaDetails: React.FC<MediaDetailsProps> = ({ 
   media, 
   onPlay, 
   onClose, 
-  onAddToList 
+  onAddToList,
+  watchProgress 
 }) => {
   // Only fetch TMDB data for movies and series, not for music
   const shouldFetchTMDB = media.type === 'movie' || media.type === 'series';
@@ -45,6 +48,27 @@ const MediaDetails: React.FC<MediaDetailsProps> = ({
   
   // Check if this is a group with episodes
   const isGroup = media.isGroup && media.episodes && media.episodes.length > 0;
+  
+  // Determine button text based on watch progress
+  const getPlayButtonText = () => {
+    if (isGroup) {
+      return 'Lire le premier épisode';
+    }
+    
+    if (!watchProgress) {
+      return 'Lecture';
+    }
+    
+    const progressPercent = watchProgress.progress_percentage || 0;
+    
+    if (progressPercent >= 90) {
+      return 'Recommencer';
+    } else if (progressPercent > 1) {
+      return 'Continuer la lecture';
+    } else {
+      return 'Lecture';
+    }
+  };
   
   // Share functionality
   const handleShare = async () => {
@@ -217,12 +241,6 @@ const MediaDetails: React.FC<MediaDetailsProps> = ({
                         </div>
                       </div>
 
-                      {/* Additional Info */}
-                      <div className="text-xs text-gray-400 space-y-1 mb-3">
-                        <div>Type : <span className="text-white">{media.type === 'movie' ? 'Film' : media.type === 'series' ? 'Série' : 'Musique'}</span></div>
-                        <div>Qualité : <span className="text-white">HD</span></div>
-                      </div>
-
                       {/* Action Buttons */}
                       <div className="flex flex-col gap-2 transition-all duration-300 ease-out">
                         <motion.button
@@ -241,7 +259,7 @@ const MediaDetails: React.FC<MediaDetailsProps> = ({
                           }}
                         >
                           <Play size={14} fill="currentColor" />
-                          <span>{isGroup ? 'Lire le premier épisode' : 'Lecture'}</span>
+                          <span>{getPlayButtonText()}</span>
                         </motion.button>
                         
                         {onAddToList && (
@@ -332,7 +350,7 @@ const MediaDetails: React.FC<MediaDetailsProps> = ({
                         }}
                       >
                         <Play size={16} className="md:w-5 md:h-5" fill="currentColor" />
-                        <span>{isGroup ? 'Lire le premier épisode' : 'Lecture'}</span>
+                        <span>{getPlayButtonText()}</span>
                       </motion.button>
                       
                       {onAddToList && (

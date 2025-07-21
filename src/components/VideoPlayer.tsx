@@ -1,24 +1,67 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, SkipBack, SkipForward, X } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import type { MediaItem } from '../services/api';
-import { useWatchProgress } from '../hooks/useWatchProgress';
-import { useAuth } from '../hooks/useAuth';
+import React, { useRef, useEffect, useState, useCallback } from "react";
+import {
+  Play,
+  Pause,
+  Volume2,
+  VolumeX,
+  Maximize,
+  Minimize,
+  SkipBack,
+  SkipForward,
+  X,
+  Minus,
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import type { MediaItem } from "../services/api";
+import { useWatchProgress } from "../hooks/useWatchProgress";
+import { useAuth } from "../hooks/useAuth";
 
 interface VideoPlayerProps {
   media: MediaItem;
   onClose: () => void;
   isVisible: boolean;
   startTime?: number; // Position de départ en secondes
+  onMinimize?: () => void;
+  isMinimized?: boolean;
+  onPlayerStateChange?: (state: {
+    currentTime: number;
+    duration: number;
+    isPlaying: boolean;
+    volume: number;
+    isMuted: boolean;
+  }) => void;
+  mediaRef?: React.RefObject<HTMLVideoElement | HTMLAudioElement | null>;
 }
 
-const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible, startTime = 0 }) => {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
+const VideoPlayer: React.FC<VideoPlayerProps> = ({
+  media,
+  onClose,
+  isVisible,
+  startTime = 0,
+  onMinimize,
+  isMinimized = false,
+  onPlayerStateChange,
+  mediaRef: externalMediaRef,
+}) => {
+  const internalVideoRef = useRef<HTMLVideoElement>(null);
+  const internalAudioRef = useRef<HTMLAudioElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  
+
   // Determine which ref to use based on media type
-  const mediaRef = media.type === 'music' ? audioRef : videoRef;
+  const mediaRef = media.type === "music" ? internalAudioRef : internalVideoRef;
+
+  console.log(isMinimized);
+
+  // Update external ref if provided
+  React.useEffect(() => {
+    if (externalMediaRef && mediaRef.current) {
+      (
+        externalMediaRef as React.MutableRefObject<
+          HTMLVideoElement | HTMLAudioElement | null
+        >
+      ).current = mediaRef.current;
+    }
+  }, [externalMediaRef, mediaRef]);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [volume, setVolume] = useState(1);
@@ -29,11 +72,12 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible, st
   const [isLoading, setIsLoading] = useState(true);
 
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  
+
   // Hooks pour le suivi de progression
-  const { saveProgress, addToHistory, markAsCompleted, getProgressForMovie } = useWatchProgress();
+  const { saveProgress, addToHistory, markAsCompleted, getProgressForMovie } =
+    useWatchProgress();
   const { user } = useAuth();
-  
+
   // États pour le suivi de progression
   const [sessionStart] = useState(new Date());
   const [lastSavedTime, setLastSavedTime] = useState(0);
@@ -47,11 +91,23 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible, st
     const totalDuration = mediaRef.current.duration;
 
     // Éviter de sauvegarder trop souvent
-    if (Math.abs(current - lastSavedTime) < 10) return;
+    if (Math.abs(current - lastSavedTime) < 2) return;
+
+    console.log("💾 Saving progress for media path:", media.path);
+    console.log("💾 Saving progress for media title:", media.title);
+    console.log("💾 Current time:", current);
 
     await saveProgress(media.path, media.title, current, totalDuration);
     setLastSavedTime(current);
-  }, [media.path, media.title, mediaRef, saveProgress, user, hasStarted, lastSavedTime]);
+  }, [
+    media.path,
+    media.title,
+    mediaRef,
+    saveProgress,
+    user,
+    hasStarted,
+    lastSavedTime,
+  ]);
 
   // Gérer la fin du visionnage
   const handleVideoEnd = useCallback(async () => {
@@ -59,11 +115,27 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible, st
 
     const totalDuration = mediaRef.current.duration;
     const sessionEnd = new Date();
-    const sessionDuration = (sessionEnd.getTime() - sessionStart.getTime()) / 1000;
+    const sessionDuration =
+      (sessionEnd.getTime() - sessionStart.getTime()) / 1000;
 
     await markAsCompleted(media.path, media.title, totalDuration);
-    await addToHistory(media.path, media.title, sessionDuration, totalDuration, sessionStart, sessionEnd);
-  }, [media.path, media.title, mediaRef, markAsCompleted, addToHistory, sessionStart, user]);
+    await addToHistory(
+      media.path,
+      media.title,
+      sessionDuration,
+      totalDuration,
+      sessionStart,
+      sessionEnd
+    );
+  }, [
+    media.path,
+    media.title,
+    mediaRef,
+    markAsCompleted,
+    addToHistory,
+    sessionStart,
+    user,
+  ]);
 
   // Charger la progression sauvegardée
   useEffect(() => {
@@ -71,23 +143,34 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible, st
       if (!user || !mediaRef.current) return;
 
       try {
+        console.log("🎵 Loading progress for media path:", media.path);
+        console.log("🎵 Media title:", media.title);
+        console.log("🎵 Media type:", media.type);
+
         const progress = await getProgressForMovie(media.path);
-        if (progress && progress.current_position > 30) { // Reprendre seulement si > 30 secondes
+        console.log("🎵 Found progress:", progress);
+
+        if (progress && progress.current_position > 0) {
+          // Reprendre dès qu'il y a une progression
+          console.log("🎵 Resuming from:", progress.current_position);
           mediaRef.current.currentTime = startTime || progress.current_position;
           setLastSavedTime(startTime || progress.current_position);
         } else if (startTime) {
+          console.log("🎵 Starting from provided time:", startTime);
           mediaRef.current.currentTime = startTime;
           setLastSavedTime(startTime);
+        } else {
+          console.log("🎵 No progress found, starting from beginning");
         }
       } catch (error) {
-        console.error('Error loading saved progress:', error);
+        console.error("Error loading saved progress:", error);
       }
     };
 
     if (duration > 0) {
       loadSavedProgress();
     }
-  }, [media.path, mediaRef, startTime, getProgressForMovie, user, duration]);
+  }, [media.path, mediaRef, media.title, media.type, startTime, getProgressForMovie, user, duration]);
 
   useEffect(() => {
     const video = mediaRef.current; // Save ref to local variable
@@ -102,6 +185,17 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible, st
       const handleTimeUpdate = () => {
         setCurrentTime(video.currentTime);
         if (video.currentTime > 0) setHasStarted(true);
+
+        // Update external state
+        if (onPlayerStateChange) {
+          onPlayerStateChange({
+            currentTime: video.currentTime,
+            duration: video.duration,
+            isPlaying,
+            volume,
+            isMuted,
+          });
+        }
       };
       const handlePlay = () => {
         setIsPlaying(true);
@@ -111,48 +205,59 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible, st
       const handleVolumeChange = () => {
         setVolume(video.volume);
         setIsMuted(video.muted);
+
+        // Update external state
+        if (onPlayerStateChange) {
+          onPlayerStateChange({
+            currentTime,
+            duration,
+            isPlaying,
+            volume: video.volume,
+            isMuted: video.muted,
+          });
+        }
       };
       const handleError = () => {
-        console.error('Video playback error');
+        console.error("Video playback error");
         setIsLoading(false);
       };
 
-      video.addEventListener('loadedmetadata', handleLoadedMetadata);
-      video.addEventListener('loadeddata', handleLoadedData);
-      video.addEventListener('canplay', handleCanPlay);
-      video.addEventListener('timeupdate', handleTimeUpdate);
-      video.addEventListener('play', handlePlay);
-      video.addEventListener('pause', handlePause);
-      video.addEventListener('volumechange', handleVolumeChange);
-      video.addEventListener('error', handleError);
-      video.addEventListener('ended', handleVideoEnd);
+      video.addEventListener("loadedmetadata", handleLoadedMetadata);
+      video.addEventListener("loadeddata", handleLoadedData);
+      video.addEventListener("canplay", handleCanPlay);
+      video.addEventListener("timeupdate", handleTimeUpdate);
+      video.addEventListener("play", handlePlay);
+      video.addEventListener("pause", handlePause);
+      video.addEventListener("volumechange", handleVolumeChange);
+      video.addEventListener("error", handleError);
+      video.addEventListener("ended", handleVideoEnd);
 
       return () => {
         // Use the same local variable for cleanup
-        video.removeEventListener('loadedmetadata', handleLoadedMetadata);
-        video.removeEventListener('loadeddata', handleLoadedData);
-        video.removeEventListener('canplay', handleCanPlay);
-        video.removeEventListener('timeupdate', handleTimeUpdate);
-        video.removeEventListener('play', handlePlay);
-        video.removeEventListener('pause', handlePause);
-        video.removeEventListener('volumechange', handleVolumeChange);
-        video.removeEventListener('error', handleError);
-        video.removeEventListener('ended', handleVideoEnd);
+        video.removeEventListener("loadedmetadata", handleLoadedMetadata);
+        video.removeEventListener("loadeddata", handleLoadedData);
+        video.removeEventListener("canplay", handleCanPlay);
+        video.removeEventListener("timeupdate", handleTimeUpdate);
+        video.removeEventListener("play", handlePlay);
+        video.removeEventListener("pause", handlePause);
+        video.removeEventListener("volumechange", handleVolumeChange);
+        video.removeEventListener("error", handleError);
+        video.removeEventListener("ended", handleVideoEnd);
       };
     }
-  }, [media.path, mediaRef, handleVideoEnd]);
+  }, [media.path, mediaRef, currentTime, duration, isMuted, isPlaying, onPlayerStateChange, volume,handleVideoEnd]);
 
   // Configuration des intervalles de sauvegarde
   useEffect(() => {
     const video = mediaRef.current;
     if (!user) return;
 
-    const progressInterval = setInterval(saveProgressCallback, 30000); // Toutes les 30 secondes
+    const progressInterval = setInterval(saveProgressCallback, 3000); // Toutes les 3 secondes
     const quickSaveInterval = setInterval(() => {
       if (video && !video.paused && hasStarted) {
         saveProgressCallback();
       }
-    }, 10000); // Sauvegarde rapide toutes les 10 secondes
+    }, 1000); // Sauvegarde instantanée pendant la lecture
 
     const handleVisibilityChange = () => {
       if (document.hidden && mediaRef.current && hasStarted) {
@@ -160,13 +265,13 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible, st
       }
     };
 
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       clearInterval(progressInterval);
       clearInterval(quickSaveInterval);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+
       // Sauvegarde finale avant le démontage
       if (video && hasStarted && video.currentTime > 0) {
         saveProgressCallback();
@@ -179,8 +284,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible, st
       if (isPlaying) {
         mediaRef.current.pause();
       } else {
-        mediaRef.current.play().catch(error => {
-          console.error('🎵 Play failed:', error);
+        mediaRef.current.play().catch((error) => {
+          console.error("🎵 Play failed:", error);
         });
       }
     }
@@ -210,7 +315,10 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible, st
 
   const skip = (seconds: number) => {
     if (mediaRef.current) {
-      mediaRef.current.currentTime = Math.max(0, Math.min(duration, currentTime + seconds));
+      mediaRef.current.currentTime = Math.max(
+        0,
+        Math.min(duration, currentTime + seconds)
+      );
     }
   };
 
@@ -227,16 +335,16 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible, st
   const formatTime = (time: number) => {
     const minutes = Math.floor(time / 60);
     const seconds = Math.floor(time % 60);
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    return `${minutes}:${seconds.toString().padStart(2, "0")}`;
   };
 
   const handleMouseMove = () => {
     setShowControls(true);
-    
+
     if (controlsTimeoutRef.current) {
       clearTimeout(controlsTimeoutRef.current);
     }
-    
+
     controlsTimeoutRef.current = setTimeout(() => {
       setShowControls(false);
     }, 3000);
@@ -248,17 +356,17 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible, st
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      if (e.key === "Escape") {
         onClose();
       }
     };
 
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    document.addEventListener('keydown', handleKeyDown);
-    
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    document.addEventListener("keydown", handleKeyDown);
+
     return () => {
-      document.removeEventListener('fullscreenchange', handleFullscreenChange);
-      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+      document.removeEventListener("keydown", handleKeyDown);
     };
   }, [onClose]);
 
@@ -280,26 +388,28 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible, st
         }}
       >
         {/* Media Element */}
-        {media.type === 'music' ? (
+        {media.type === "music" ? (
           <div className="flex flex-col items-center justify-center h-full">
             {/* Album artwork background for music */}
             {media.poster && (
-              <div 
+              <div
                 className="absolute inset-0 bg-cover bg-center opacity-20"
                 style={{ backgroundImage: `url(${media.poster})` }}
               />
             )}
-            
+
             {/* Music player display */}
             <div className="relative z-10 text-center">
               {media.poster && (
-                <img 
-                  src={media.poster} 
+                <img
+                  src={media.poster}
                   alt={media.title}
                   className="w-64 h-64 mx-auto mb-6 rounded-xl shadow-2xl"
                 />
               )}
-              <h2 className="text-2xl font-bold text-white mb-2">{media.title}</h2>
+              <h2 className="text-2xl font-bold text-white mb-2">
+                {media.title}
+              </h2>
               {media.artist && (
                 <p className="text-lg text-gray-300 mb-1">{media.artist}</p>
               )}
@@ -307,28 +417,28 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible, st
                 <p className="text-md text-gray-400">{media.album}</p>
               )}
             </div>
-            
+
             <audio
-              ref={audioRef}
+              ref={internalAudioRef}
               src={`/api/stream/${encodeURIComponent(media.path)}`}
               autoPlay
               preload="metadata"
               onLoadedData={() => {
-                console.log('🎵 Audio loaded, attempting to play');
-                audioRef.current?.play().catch(error => {
-                  console.error('🎵 Auto-play failed:', error);
+                console.log("🎵 Audio loaded, attempting to play");
+                internalAudioRef.current?.play().catch((error) => {
+                  console.error("🎵 Auto-play failed:", error);
                   setIsLoading(false);
                 });
               }}
               onError={(e) => {
-                console.error('🎵 Audio error:', e);
+                console.error("🎵 Audio error:", e);
                 setIsLoading(false);
               }}
             />
           </div>
         ) : (
           <video
-            ref={videoRef}
+            ref={internalVideoRef}
             className="w-full h-full object-contain"
             src={`/api/stream/${encodeURIComponent(media.path)}`}
             autoPlay
@@ -354,23 +464,37 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible, st
         {/* Close Button - Show on hover or with controls */}
         <AnimatePresence>
           {showControls && (
-            <motion.div 
+            <motion.div
               className="absolute top-4 right-4 z-10"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.3 }}
             >
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onClose();
-                }}
-                className="text-white hover:text-gray-300 hover:bg-white/10 p-3 rounded-full transition-all duration-200 backdrop-blur-sm bg-black/50"
-                aria-label="Fermer le lecteur vidéo"
-              >
-                <X size={24} />
-              </button>
+              <div className="flex space-x-2">
+                {onMinimize && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onMinimize();
+                    }}
+                    className="text-white hover:text-gray-300 hover:bg-white/10 p-3 rounded-full transition-all duration-200 backdrop-blur-sm bg-black/50"
+                    aria-label="Minimiser le lecteur"
+                  >
+                    <Minus size={24} />
+                  </button>
+                )}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onClose();
+                  }}
+                  className="text-white hover:text-gray-300 hover:bg-white/10 p-3 rounded-full transition-all duration-200 backdrop-blur-sm bg-black/50"
+                  aria-label="Fermer le lecteur vidéo"
+                >
+                  <X size={24} />
+                </button>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -387,7 +511,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible, st
             >
               {/* Top Controls */}
               <div className="absolute top-4 left-4 right-16 flex justify-between items-center">
-                <h2 className="text-white text-xl font-semibold">{media.frenchTitle || media.title}</h2>
+                <h2 className="text-white text-xl font-semibold">
+                  {media.frenchTitle || media.title}
+                </h2>
               </div>
 
               {/* Center Play Button */}
@@ -398,7 +524,11 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible, st
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
                 >
-                  {isPlaying ? <Pause size={32} /> : <Play size={32} fill="currentColor" />}
+                  {isPlaying ? (
+                    <Pause size={32} />
+                  ) : (
+                    <Play size={32} fill="currentColor" />
+                  )}
                 </motion.button>
               </div>
 
@@ -427,16 +557,20 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible, st
                       onClick={togglePlay}
                       className="text-white hover:text-gray-300 transition-colors"
                     >
-                      {isPlaying ? <Pause size={24} /> : <Play size={24} fill="currentColor" />}
+                      {isPlaying ? (
+                        <Pause size={24} />
+                      ) : (
+                        <Play size={24} fill="currentColor" />
+                      )}
                     </button>
-                    
+
                     <button
                       onClick={() => skip(-10)}
                       className="text-white hover:text-gray-300 transition-colors"
                     >
                       <SkipBack size={24} />
                     </button>
-                    
+
                     <button
                       onClick={() => skip(10)}
                       className="text-white hover:text-gray-300 transition-colors"
@@ -450,7 +584,11 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible, st
                         onClick={toggleMute}
                         className="text-white hover:text-gray-300 transition-colors"
                       >
-                        {isMuted ? <VolumeX size={24} /> : <Volume2 size={24} />}
+                        {isMuted ? (
+                          <VolumeX size={24} />
+                        ) : (
+                          <Volume2 size={24} />
+                        )}
                       </button>
                       <input
                         type="range"
@@ -465,12 +603,16 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, isVisible, st
                   </div>
 
                   <div className="flex items-center space-x-4">
-                    {media.type !== 'music' && (
+                    {media.type !== "music" && (
                       <button
                         onClick={toggleFullscreen}
                         className="text-white hover:text-gray-300 transition-colors"
                       >
-                        {isFullscreen ? <Minimize size={24} /> : <Maximize size={24} />}
+                        {isFullscreen ? (
+                          <Minimize size={24} />
+                        ) : (
+                          <Maximize size={24} />
+                        )}
                       </button>
                     )}
                   </div>

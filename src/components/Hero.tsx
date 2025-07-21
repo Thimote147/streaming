@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Info, Volume2, VolumeX } from 'lucide-react';
+import { Play, Info } from 'lucide-react';
 import { motion } from 'framer-motion';
 import type { MediaItem } from '../services/api';
 import { useMovieData } from '../hooks/useMovieData';
@@ -11,7 +11,6 @@ interface HeroProps {
 }
 
 const Hero: React.FC<HeroProps> = ({ featuredMedia, onPlay, onMoreInfo }) => {
-  const [isMuted, setIsMuted] = React.useState(true);
   const { poster, backdrop, frenchTitle, frenchDescription, releaseYear } = useMovieData(featuredMedia?.title || '', featuredMedia?.year, featuredMedia?.type);
 
   const defaultFeaturedMedia: MediaItem = {
@@ -145,19 +144,6 @@ const Hero: React.FC<HeroProps> = ({ featuredMedia, onPlay, onMoreInfo }) => {
           </div>
         </div>
       </div>
-
-      {/* Volume Control - Hidden on mobile, visible on tablet+ */}
-      <motion.button
-        onClick={() => setIsMuted(!isMuted)}
-        className="hidden md:block absolute bottom-20 right-8 p-3 bg-black/50 rounded-full border border-gray-600 text-white hover:bg-black/70 transition-colors shadow-lg backdrop-blur-sm"
-        initial={{ opacity: 0, scale: 0 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.5, delay: 1 }}
-        whileHover={{ scale: 1.1 }}
-        whileTap={{ scale: 0.9 }}
-      >
-        {isMuted ? <VolumeX size={24} /> : <Volume2 size={24} />}
-      </motion.button>
     </div>
   );
 };

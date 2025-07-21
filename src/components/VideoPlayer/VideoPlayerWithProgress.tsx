@@ -33,8 +33,8 @@ const VideoPlayerWithProgress: React.FC<VideoPlayerWithProgressProps> = ({
     const currentTime = videoRef.current.currentTime;
     const duration = videoRef.current.duration;
 
-    // Éviter de sauvegarder trop souvent (minimum 10 secondes de différence)
-    if (Math.abs(currentTime - lastSavedTime) < 10) return;
+    // Éviter de sauvegarder trop souvent (minimum 2 secondes de différence)
+    if (Math.abs(currentTime - lastSavedTime) < 2) return;
 
     await saveProgress(src, movieTitle, currentTime, duration);
     setLastSavedTime(currentTime);
@@ -102,12 +102,12 @@ const VideoPlayerWithProgress: React.FC<VideoPlayerWithProgressProps> = ({
     if (!video) return;
 
     // Intervalles de sauvegarde
-    const progressInterval = setInterval(saveProgressCallback, 30000); // Toutes les 30 secondes
+    const progressInterval = setInterval(saveProgressCallback, 3000); // Toutes les 3 secondes
     const quickSaveInterval = setInterval(() => {
       if (video.currentTime > 0 && !video.paused) {
         saveProgressCallback();
       }
-    }, 10000); // Sauvegarde rapide toutes les 10 secondes pendant la lecture
+    }, 1000); // Sauvegarde instantanée pendant la lecture
 
     // Événements de visibilité
     document.addEventListener('visibilitychange', handleVisibilityChange);

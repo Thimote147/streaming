@@ -11,6 +11,7 @@ interface MediaRowProps {
   onMoreInfo: (media: MediaItem) => void;
   onAddToList?: (media: MediaItem) => void;
   useHorizontalScroll?: boolean;
+  isLast?: boolean;
 }
 
 const MediaRow: React.FC<MediaRowProps> = ({ 
@@ -19,7 +20,8 @@ const MediaRow: React.FC<MediaRowProps> = ({
   onPlay, 
   onMoreInfo, 
   onAddToList,
-  useHorizontalScroll = false
+  useHorizontalScroll = false,
+  isLast = false
 }) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = React.useState(false);
@@ -60,10 +62,10 @@ const MediaRow: React.FC<MediaRowProps> = ({
   }
 
   return (
-    <div className="relative group mb-16 py-4">
+    <div className={`relative group py-1 ${isLast ? 'mb-0' : 'mb-4'}`}>
       {/* Section Title */}
       <motion.h2 
-        className="text-white text-xl md:text-2xl font-semibold mb-4 px-4 md:px-8"
+        className="text-white text-xl md:text-2xl font-semibold mb-2 px-4 md:px-8"
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.5 }}

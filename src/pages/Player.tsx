@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import VideoPlayer from '../components/VideoPlayer';
+import MiniPlayer from '../components/MiniPlayer';
 import { streamingAPI } from '../services/api';
 import type { MediaItem } from '../services/api';
 
@@ -16,6 +17,15 @@ const Player: React.FC = () => {
   const [media, setMedia] = useState<MediaItem | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isMinimized, setIsMinimized] = useState(false);
+  const [playerState, setPlayerState] = useState({
+    currentTime: 0,
+    duration: 0,
+    isPlaying: false,
+    volume: 1,
+    isMuted: false,
+  });
+  const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -208,6 +218,56 @@ const Player: React.FC = () => {
     navigate(-1); // Go back to previous page
   };
 
+  const handleMinimize = () => {
+    setIsMinimized(true);
+  };
+
+  const handleMaximize = () => {
+    setIsMinimized(false);
+  };
+
+  const handlePlayPause = () => {
+    if (mediaRef.current) {
+      if (playerState.isPlaying) {
+        mediaRef.current.pause();
+      } else {
+        mediaRef.current.play().catch(console.error);
+      }
+    }
+  };
+
+  const handlePlayerStateChange = (state: {
+    currentTime: number;
+    duration: number;
+    isPlaying: boolean;
+    volume: number;
+    isMuted: boolean;
+  }) => {
+    setPlayerState(state);
+  };
+
+  const handleVolumeChange = (volume: number) => {
+    if (mediaRef.current) {
+      mediaRef.current.volume = volume;
+      setPlayerState(prev => ({ ...prev, volume, isMuted: volume === 0 }));
+    }
+  };
+
+  const handleSeek = (time: number) => {
+    if (mediaRef.current) {
+      mediaRef.current.currentTime = time;
+      setPlayerState(prev => ({ ...prev, currentTime: time }));
+    }
+  };
+
+  const handleToggleMute = () => {
+    if (mediaRef.current) {
+      const newMuted = !playerState.isMuted;
+      mediaRef.current.muted = newMuted;
+      setPlayerState(prev => ({ ...prev, isMuted: newMuted }));
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
@@ -256,11 +316,37 @@ const Player: React.FC = () => {
   }
 
   return (
-    <VideoPlayer
-      media={media}
-      onClose={handleClose}
-      isVisible={true}
-    />
+    <>
+      {!isMinimized && (
+        <VideoPlayer
+          media={media}
+          onClose={handleClose}
+          onMinimize={handleMinimize}
+          isVisible={true}
+          isMinimized={isMinimized}
+          onPlayerStateChange={handlePlayerStateChange}
+          mediaRef={mediaRef}
+        />
+      )}
+      
+      {isMinimized && (
+        <MiniPlayer
+          media={media}
+          isVisible={isMinimized}
+          onClose={handleClose}
+          onMaximize={handleMaximize}
+          currentTime={playerState.currentTime}
+          duration={playerState.duration}
+          isPlaying={playerState.isPlaying}
+          volume={playerState.volume}
+          isMuted={playerState.isMuted}
+          onPlayPause={handlePlayPause}
+          onVolumeChange={handleVolumeChange}
+          onSeek={handleSeek}
+          onToggleMute={handleToggleMute}
+        />
+      )}
+    </>
   );
 };
 
