@@ -3,6 +3,7 @@ import { exec } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import crypto from 'crypto';
 import 'dotenv/config';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -221,7 +222,7 @@ app.get('/api/search', async (req, res) => {
       }
       
       return {
-        id: `search_${index}`,
+        id: generateUniqueId(fileNameWithoutExt, category),
         title: formattedTitle,
         frenchTitle: movieData?.frenchTitle || null,
         path: filePath,
@@ -340,7 +341,7 @@ const getCategoryItems = async (category) => {
       files = output.split('\n').filter(line => line.trim());
     }
     
-    const mediaItems = files.map((filePath, index) => {
+    const mediaItems = files.map((filePath) => {
       const fileName = filePath.split('/').pop() || '';
       const fileNameWithoutExt = fileName.split('.').slice(0, -1).join('.');
       
@@ -350,7 +351,7 @@ const getCategoryItems = async (category) => {
         filePath;
       
       return {
-        id: `${category.toLowerCase()}_${index}`,
+        id: generateUniqueId(fileNameWithoutExt, category),
         title: formatTitle(fileNameWithoutExt),
         originalFileName: fileNameWithoutExt, // Keep original for pattern matching
         path: webPath,
@@ -710,6 +711,41 @@ app.get('/api/stream/:path(*)', async (req, res) => {
   }
 });
 
+// Helper function to generate unique ID from filename
+const generateUniqueId = (filename, category, sequelNumber = null) => {
+  // Clean the filename to create a stable ID
+  const cleanName = filename
+    .toLowerCase()
+    .replace(/\.(mp4|mkv|avi|mov|webm)$/i, '') // Remove file extensions
+    .replace(/[\[\(].*?[\]\)]/g, '') // Remove content in brackets/parentheses
+    .replace(/\b(19|20)\d{2}\b/g, '') // Remove years
+    .replace(/\b(CAM|TS|TC|SCR|R5|DVDRip|BRRip|BluRay|1080p|720p|480p|HDTV|WEBRip|x264|x265|HEVC|AAC|AC3|DTS|IMAX)\b/gi, '') // Remove quality tags
+    .replace(/[^a-z0-9\s]/g, ' ') // Replace special characters with spaces
+    .replace(/\s+/g, '_') // Replace spaces with underscores
+    .replace(/^_+|_+$/g, '') // Remove leading/trailing underscores
+    .trim();
+  
+  // Create a more readable base ID
+  let baseId;
+  
+  if (category.toLowerCase() === 'episode') {
+    // For episodes, use the episode identifier
+    baseId = `episode_${cleanName}_${sequelNumber || 'unknown'}`;
+  } else if (category.toLowerCase() === 'film' && sequelNumber) {
+    // For films in a saga, include the sequel number
+    baseId = `film_${cleanName}_${sequelNumber}`;
+  } else {
+    // For regular items, use category prefix
+    const sequelSuffix = sequelNumber ? `_${sequelNumber}` : '';
+    baseId = `${category.toLowerCase()}_${cleanName}${sequelSuffix}`;
+  }
+  
+  // Add a shorter hash for uniqueness but keep it readable
+  const hash = crypto.createHash('md5').update(filename + category + (sequelNumber || '')).digest('hex').substring(0, 6);
+  
+  return `${baseId}_${hash}`;
+};
+
 // Helper functions
 const formatTitle = (filename) => {
   return filename
@@ -776,15 +812,20 @@ const extractSeriesInfo = (filename) => {
 
 // Extract sequel info from movie filename
 const extractSequelInfo = (filename) => {
-  // Patterns: Movie 2, Movie II, Movie Part 2, etc.
+  // Enhanced patterns to detect more sequel formats
   const patterns = [
     /^(.+?)\s+(\d+)(?:\s|$)/, // "Movie 2"
     /^(.+?)\s+(II|III|IV|V|VI|VII|VIII|IX|X)(?:\s|$)/, // "Movie II"
     /^(.+?)\s+Part\s+(\d+)(?:\s|$)/i, // "Movie Part 2"
-    /^(.+?)\s+Chapter\s+(\d+)(?:\s|$)/i // "Movie Chapter 2"
+    /^(.+?)\s+Chapter\s+(\d+)(?:\s|$)/i, // "Movie Chapter 2"
+    /^(.+?)\s+Volume\s+(\d+)(?:\s|$)/i, // "Movie Volume 2"
+    /^(.+?)\s*:\s*(.+)$/, // "Movie: Subtitle" - treat as potential sequel
+    /^(.+?)\s*[-–—]\s*(.+)$/, // "Movie - Subtitle" - treat as potential sequel
   ];
   
-  for (const pattern of patterns) {
+  // First, try the explicit numbering patterns
+  for (let i = 0; i < 5; i++) {
+    const pattern = patterns[i];
     const match = filename.match(pattern);
     if (match) {
       const title = match[1].trim();
@@ -792,7 +833,7 @@ const extractSequelInfo = (filename) => {
       
       // Convert Roman numerals to numbers
       if (isNaN(sequelNumber)) {
-        const romanToNum = { 'II': 2, 'III': 3, 'IV': 4, 'V': 5, 'VI': 6, 'VII': 7, 'VIII': 8, 'IX': 9, 'X': 10 };
+        const romanToNum = { 'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5, 'VI': 6, 'VII': 7, 'VIII': 8, 'IX': 9, 'X': 10 };
         sequelNumber = romanToNum[sequelNumber] || 1;
       }
       
@@ -802,7 +843,95 @@ const extractSequelInfo = (filename) => {
       };
     }
   }
+  
+  // Handle subtitle patterns (could indicate sequels)
+  const subtitlePatterns = [patterns[5], patterns[6]]; // : and - patterns
+  for (const pattern of subtitlePatterns) {
+    const match = filename.match(pattern);
+    if (match) {
+      const baseTitle = match[1].trim();
+      const subtitle = match[2].trim();
+      
+      // Check if subtitle contains sequel indicators
+      const sequelIndicators = /\b(reloaded|revolutions|awakens|rises|returns|revenge|reborn|resurrection|origins|beginning|genesis|ultimate|final|last|forever|legacy|evolution|revolution|redemption|reckoning)\b/i;
+      
+      if (sequelIndicators.test(subtitle)) {
+        return {
+          baseTitle: baseTitle,
+          sequelNumber: 1, // Default to 1, will be handled by grouping logic
+          hasSubtitle: true,
+          subtitle: subtitle
+        };
+      }
+    }
+  }
+  
   return null;
+};
+
+// Detect potential saga patterns by analyzing similar titles
+const detectSagaPatterns = (mediaItems) => {
+  const titleGroups = new Map();
+  
+  mediaItems.forEach(item => {
+    const cleanTitle = item.originalFileName
+      .toLowerCase()
+      .replace(/\b(19|20)\d{2}\b/g, '') // Remove years
+      .replace(/[\[\(].*?[\]\)]/g, '') // Remove brackets
+      .replace(/[^a-z0-9\s]/g, ' ') // Replace special chars
+      .replace(/\s+/g, ' ')
+      .trim();
+    
+    // Look for similar titles (first 3 words or 70% similarity)
+    const titleWords = cleanTitle.split(' ').slice(0, 3).join(' ');
+    
+    for (const [existingTitle, items] of titleGroups) {
+      const similarity = calculateStringSimilarity(titleWords, existingTitle);
+      if (similarity > 0.7) {
+        items.push(item);
+        return;
+      }
+    }
+    
+    titleGroups.set(titleWords, [item]);
+  });
+  
+  // Return groups with more than one item (potential sagas)
+  return Array.from(titleGroups.entries())
+    .filter(([_, items]) => items.length > 1)
+    .map(([title, items]) => ({ baseTitle: title, items }));
+};
+
+// Calculate string similarity using Levenshtein distance
+const calculateStringSimilarity = (str1, str2) => {
+  const longer = str1.length > str2.length ? str1 : str2;
+  const shorter = str1.length > str2.length ? str2 : str1;
+  
+  if (longer.length === 0) return 1.0;
+  
+  const editDistance = levenshteinDistance(longer, shorter);
+  return (longer.length - editDistance) / longer.length;
+};
+
+// Levenshtein distance calculation
+const levenshteinDistance = (str1, str2) => {
+  const matrix = Array(str2.length + 1).fill().map(() => Array(str1.length + 1).fill(0));
+  
+  for (let i = 0; i <= str1.length; i++) matrix[0][i] = i;
+  for (let j = 0; j <= str2.length; j++) matrix[j][0] = j;
+  
+  for (let j = 1; j <= str2.length; j++) {
+    for (let i = 1; i <= str1.length; i++) {
+      const cost = str1[i - 1] === str2[j - 1] ? 0 : 1;
+      matrix[j][i] = Math.min(
+        matrix[j - 1][i] + 1,     // deletion
+        matrix[j][i - 1] + 1,     // insertion
+        matrix[j - 1][i - 1] + cost // substitution
+      );
+    }
+  }
+  
+  return matrix[str2.length][str1.length];
 };
 
 // Group media items by series or sequel
@@ -817,6 +946,13 @@ const groupMediaItems = (mediaItems, category) => {
   
   const groups = new Map();
   const ungrouped = [];
+  
+  // For films, detect potential sagas first
+  let potentialSagas = [];
+  if (normalizedCategory === 'films') {
+    potentialSagas = detectSagaPatterns(mediaItems);
+    console.log(`🎯 Detected ${potentialSagas.length} potential sagas:`, potentialSagas.map(s => s.baseTitle));
+  }
   
   mediaItems.forEach(item => {
     console.log(`🔄 Processing item: ${item.title}`);
@@ -837,8 +973,10 @@ const groupMediaItems = (mediaItems, category) => {
         }
         
         const group = groups.get(groupKey);
+        const episodeId = `${seriesInfo.seasonNumber.toString().padStart(2, '0')}${seriesInfo.episodeNumber.toString().padStart(2, '0')}`;
         group.episodes.push({
           ...item,
+          id: generateUniqueId(item.originalFileName || item.title, 'episode', episodeId),
           seasonNumber: seriesInfo.seasonNumber,
           episodeNumber: seriesInfo.episodeNumber,
           seriesTitle: seriesInfo.seriesTitle
@@ -848,6 +986,9 @@ const groupMediaItems = (mediaItems, category) => {
         ungrouped.push(item);
       }
     } else if (normalizedCategory === 'films') {
+      let isGrouped = false;
+      
+      // First, try explicit sequel detection
       const sequelInfo = extractSequelInfo(item.originalFileName || item.title);
       if (sequelInfo) {
         const groupKey = sequelInfo.baseTitle.toLowerCase();
@@ -865,10 +1006,46 @@ const groupMediaItems = (mediaItems, category) => {
         const group = groups.get(groupKey);
         group.episodes.push({
           ...item,
-          sequelNumber: sequelInfo.sequelNumber
+          id: generateUniqueId(item.originalFileName || item.title, 'film', sequelInfo.sequelNumber),
+          sequelNumber: sequelInfo.sequelNumber,
+          subtitle: sequelInfo.subtitle || null,
+          hasSubtitle: sequelInfo.hasSubtitle || false
         });
         group.episodeCount = group.episodes.length;
+        isGrouped = true;
       } else {
+        // Check if this item belongs to a detected saga
+        for (const saga of potentialSagas) {
+          if (saga.items.includes(item)) {
+            const groupKey = saga.baseTitle.toLowerCase();
+            if (!groups.has(groupKey)) {
+              groups.set(groupKey, {
+                ...item,
+                id: `saga_${groupKey.replace(/\s+/g, '_')}`,
+                title: formatTitle(saga.baseTitle),
+                isGroup: true,
+                episodes: [],
+                episodeCount: 0
+              });
+            }
+            
+            const group = groups.get(groupKey);
+            // Assign sequential numbers to saga items
+            const sagaNumber = saga.items.indexOf(item) + 1;
+            group.episodes.push({
+              ...item,
+              id: generateUniqueId(item.originalFileName || item.title, 'film', sagaNumber),
+              sequelNumber: sagaNumber,
+              isSagaItem: true
+            });
+            group.episodeCount = group.episodes.length;
+            isGrouped = true;
+            break;
+          }
+        }
+      }
+      
+      if (!isGrouped) {
         ungrouped.push(item);
       }
     }
