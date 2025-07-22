@@ -29,114 +29,7 @@ const Home: React.FC = () => {
     }
   };
 
-  const handlePlay = (media: MediaItem) => {
-    let navigationUrl: string;
-    
-    // 0. Détecter les groupes de sequels (hero section avec ID comme "sequel_john_wick")
-    if (media.id?.startsWith('sequel_') && media.isGroup && media.episodes && media.episodes.length > 0) {
-      // Pour les groupes de sequels, jouer le premier épisode
-      const firstEpisode = media.episodes[0];
-      if (firstEpisode.sequelNumber) {
-        const baseName = media.title.toLowerCase()
-          .replace(/[^a-z0-9\s]/g, '')
-          .replace(/\s+/g, '_');
-        navigationUrl = `/player/films/${baseName}/${firstEpisode.sequelNumber}`;
-      } else {
-        navigationUrl = `/player/${encodeURIComponent(firstEpisode.id)}`;
-      }
-    }
-    // 1. Détecter si c'est un épisode (seasonNumber et episodeNumber existent)
-    else if (media.seasonNumber && media.episodeNumber) {
-      const seriesName = media.seriesTitle || media.title;
-      const cleanSeriesName = seriesName.toLowerCase()
-        .replace(/[^a-z0-9\s]/g, '')
-        .replace(/\s+/g, '_');
-      
-      const seasonFormatted = media.seasonNumber.toString().padStart(2, '0');
-      const episodeFormatted = media.episodeNumber.toString().padStart(2, '0');
-      
-      navigationUrl = `/player/series/${cleanSeriesName}/s${seasonFormatted}/e${episodeFormatted}`;
-    } 
-    // 2. Film de saga avec sequelNumber
-    else if (media.sequelNumber && media.type === 'movie') {
-      const baseTitle = media.title
-        .replace(/\s+\d+$/g, '')
-        .replace(/\s+(I{1,4}|V|VI{1,3}|IX|X)$/g, '');
-      
-      const baseName = baseTitle.toLowerCase()
-        .replace(/[^a-z0-9\s]/g, '')
-        .replace(/\s+/g, '_');
-      
-      navigationUrl = `/player/films/${baseName}/${media.sequelNumber}`;
-    } 
-    // 3. Série avec sequelNumber
-    else if (media.sequelNumber && media.type === 'series') {
-      const baseTitle = media.title
-        .replace(/\s+\d+$/g, '')
-        .replace(/\s+(I{1,4}|V|VI{1,3}|IX|X)$/g, '');
-      
-      const baseName = baseTitle.toLowerCase()
-        .replace(/[^a-z0-9\s]/g, '')
-        .replace(/\s+/g, '_');
-      
-      navigationUrl = `/player/series/${baseName}/${media.sequelNumber}`;
-    } 
-    // 4. Fichier musical
-    else if (media.type === 'music') {
-      navigationUrl = `/player/musiques/${media.id}`;
-    } 
-    // 5. Fallback
-    else {
-      navigationUrl = `/player/${encodeURIComponent(media.id)}`;
-    }
-    
-    navigate(navigationUrl);
-  };
-
-  const handleContinueWatching = (moviePath: string) => {
-    // Extraire le titre du fichier à partir du chemin
-    const fileName = moviePath.split('/').pop()?.replace(/\.[^/.]+$/, '') || '';
-    
-    // Détecter le type de média
-    const isMusic = /\.(mp3|flac|wav)$/i.test(moviePath);
-    const isSeries = moviePath.includes('/Series/') || /S\d{2}E\d{2}/i.test(fileName);
-    
-    let navigationUrl: string;
-    
-    if (isMusic) {
-      // Pour la musique, utiliser l'ID basé sur le nom de fichier avec underscores
-      const cleanFileName = fileName.replace(/\s+/g, '_');
-      navigationUrl = `/player/musiques/${cleanFileName}`;
-    } else if (isSeries) {
-      // Pour les séries, essayer d'extraire les informations
-      const episodeMatch = fileName.match(/(.+?)\s*S(\d{2})E(\d{2})/i);
-      if (episodeMatch) {
-        const [, seriesName, season, episode] = episodeMatch;
-        const cleanSeriesName = seriesName.toLowerCase()
-          .replace(/[^a-z0-9\s]/g, '')
-          .replace(/\s+/g, '_');
-        navigationUrl = `/player/series/${cleanSeriesName}/s${season}/e${episode}`;
-      } else {
-        // Fallback pour les séries
-        navigationUrl = `/player/${encodeURIComponent(moviePath)}`;
-      }
-    } else {
-      // Pour les films, vérifier s'il y a un numéro de suite
-      const sequelMatch = fileName.match(/(.+?)\s+(\d+)$/);
-      if (sequelMatch) {
-        const [, baseName, sequelNumber] = sequelMatch;
-        const cleanBaseName = baseName.toLowerCase()
-          .replace(/[^a-z0-9\s]/g, '')
-          .replace(/\s+/g, '_');
-        navigationUrl = `/player/films/${cleanBaseName}/${sequelNumber}`;
-      } else {
-        // Fallback pour les films simples
-        navigationUrl = `/player/${encodeURIComponent(moviePath)}`;
-      }
-    }
-    
-    navigate(navigationUrl);
-  };
+  // handlePlay removed - using global MiniPlayer with startPlaying instead
 
   const handleMoreInfo = (media: MediaItem) => {
     const route = media.type === 'movie' ? 'films' : media.type === 'series' ? 'series' : media.type === 'music' ? 'musiques' : 'films';
@@ -146,20 +39,43 @@ const Home: React.FC = () => {
   };
 
   const handleAddToList = (media: MediaItem) => {
-    // TODO: Implement add to watchlist
     console.log('Add to list:', media.title);
   };
 
-  const getFeaturedMedia = (): MediaItem | undefined => {
+  const handleContinueWatching = (moviePath: string) => {
+    const fileName = moviePath.split('/').pop()?.replace(/\.[^/.]+$/, '') || '';
+    const isMusic = /\.(mp3|flac|wav)$/i.test(moviePath);
+    const isSeries = moviePath.includes('/Series/') || /S\d{2}E\d{2}/i.test(fileName);
+    
+    let navigationUrl: string;
+    
+    if (isMusic) {
+      const cleanTitle = cleanTitleForUrl(fileName);
+      navigationUrl = `/player/musiques/${cleanTitle}`;
+    } else if (isSeries) {
+      const episodeMatch = fileName.match(/(.+?)[.\s]+S(\d+)E(\d+)/i);
+      if (episodeMatch) {
+        const [, seriesTitle, season, episode] = episodeMatch;
+        const cleanSeriesTitle = cleanTitleForUrl(seriesTitle);
+        navigationUrl = `/player/series/${cleanSeriesTitle}/${season}/${episode}`;
+      } else {
+        navigationUrl = `/player/${encodeURIComponent(fileName)}`;
+      }
+    } else {
+      navigationUrl = `/player/${encodeURIComponent(fileName)}`;
+    }
+    
+    navigate(navigationUrl);
+  };
+
+  const getFeaturedMedia = () => {
+    if (categories.length === 0) return undefined;
     const allItems = categories.flatMap(cat => cat.items);
-    return allItems.length > 0 ? allItems[0] : undefined;
+    return allItems[0];
   };
 
   const getShuffledCategories = () => {
-    return categories.map(category => ({
-      ...category,
-      items: [...category.items].sort(() => Math.random() - 0.5)
-    }));
+    return [...categories];
   };
 
   if (isLoading) {
@@ -183,7 +99,6 @@ const Home: React.FC = () => {
       >
         <Hero
           featuredMedia={getFeaturedMedia()}
-          onPlay={handlePlay}
           onMoreInfo={handleMoreInfo}
         />
       </motion.section>
@@ -207,7 +122,6 @@ const Home: React.FC = () => {
               <MediaRow
                 title={category.name}
                 items={category.items}
-                onPlay={handlePlay}
                 onMoreInfo={handleMoreInfo}
                 onAddToList={handleAddToList}
                 useHorizontalScroll={true}

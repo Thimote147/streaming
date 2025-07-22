@@ -1,3 +1,5 @@
+import { persistentCache } from './persistentCache';
+
 export interface MediaItem {
   id: string;
   title: string;
@@ -35,18 +37,44 @@ export interface MediaCategory {
 
 class StreamingAPI {
   private baseUrl = '/api';
-  private posterCache = new Map<string, {poster: string | null, frenchPoster?: string, backdrop: string | null, frenchTitle?: string, frenchDescription?: string, releaseDate?: string, releaseYear?: number, genres?: number[], voteAverage?: number, voteCount?: number} | null>();
+  private posterCache = new Map<string, {poster: string | null, frenchPoster?: string, backdrop: string | null, frenchTitle?: string, frenchDescription?: string, releaseDate?: string, releaseYear?: number, genres?: number[], voteAverage?: number, voteCount?: number, timestamp?: number} | null>();
+  private readonly CACHE_TTL = 3600000; // 1 hour in milliseconds
 
   async fetchCategories(): Promise<MediaCategory[]> {
     try {
+      // Try cache first
+      const cached = await persistentCache.get('categories', 'all');
+      if (cached) {
+        // Return cached data immediately, but refresh in background
+        this.refreshCategoriesInBackground();
+        return cached;
+      }
+
       const response = await fetch(`${this.baseUrl}/categories`);
       if (!response.ok) {
         throw new Error('Failed to fetch categories');
       }
-      return await response.json();
+      
+      const data = await response.json();
+      // Cache for 10 minutes
+      persistentCache.set('categories', 'all', data, 10 * 60 * 1000);
+      
+      return data;
     } catch (error) {
       console.error('Error fetching categories:', error);
       return this.getMockData();
+    }
+  }
+
+  private async refreshCategoriesInBackground(): Promise<void> {
+    try {
+      const response = await fetch(`${this.baseUrl}/categories`);
+      if (response.ok) {
+        const data = await response.json();
+        persistentCache.set('categories', 'all', data, 10 * 60 * 1000);
+      }
+    } catch {
+      // Ignore background refresh errors
     }
   }
 
@@ -95,9 +123,22 @@ class StreamingAPI {
       const cleanTitle = this.cleanMovieTitle(title);
       const cacheKey = `${cleanTitle}_${year || 'unknown'}_${type || 'movie'}`;
       
-      // Check cache first
+      // Check persistent cache first
+      const persistentCached = await persistentCache.get('tmdb', cacheKey);
+      if (persistentCached) {
+        // Cache images in background if not already done - disabled due to CORS issues
+        // this.cacheImagesInBackground(persistentCached);
+        return persistentCached;
+      }
+      
+      // Check memory cache
       if (this.posterCache.has(cacheKey)) {
-        return this.posterCache.get(cacheKey) || null;
+        const cached = this.posterCache.get(cacheKey);
+        if (cached && cached.timestamp && Date.now() - cached.timestamp < this.CACHE_TTL) {
+          return cached;
+        }
+        // Remove expired cache entry
+        this.posterCache.delete(cacheKey);
       }
       
       const params = new URLSearchParams();
@@ -109,6 +150,7 @@ class StreamingAPI {
       const response = await fetch(url);
       if (!response.ok) {
         this.posterCache.set(cacheKey, null);
+        persistentCache.set('tmdb', cacheKey, null, this.CACHE_TTL);
         return null;
       }
       
@@ -123,11 +165,16 @@ class StreamingAPI {
         releaseYear: data.releaseYear || null,
         genres: data.genres || [],
         voteAverage: data.voteAverage || null,
-        voteCount: data.voteCount || null
+        voteCount: data.voteCount || null,
+        timestamp: Date.now()
       };
       
-      // Cache the result
+      // Cache in both memory and persistent storage
       this.posterCache.set(cacheKey, movieData);
+      persistentCache.set('tmdb', cacheKey, movieData, this.CACHE_TTL);
+      
+      // Cache images in background - disabled due to CORS issues
+      // this.cacheImagesInBackground(movieData);
       
       return movieData;
     } catch (error) {
@@ -135,6 +182,23 @@ class StreamingAPI {
       return null;
     }
   }
+
+  // Disabled due to CORS issues
+  // private async cacheImagesInBackground(movieData: any): Promise<void> {
+  //   try {
+  //     if (movieData.poster) {
+  //       persistentCache.cacheImage(movieData.poster);
+  //     }
+  //     if (movieData.frenchPoster && movieData.frenchPoster !== movieData.poster) {
+  //       persistentCache.cacheImage(movieData.frenchPoster);
+  //     }
+  //     if (movieData.backdrop) {
+  //       persistentCache.cacheImage(movieData.backdrop);
+  //     }
+  //   } catch {
+  //     // Ignore background caching errors
+  //   }
+  // }
 
   cleanMovieTitle(filename: string): string {
     return filename

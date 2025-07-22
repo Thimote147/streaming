@@ -3,10 +3,11 @@ import { Play, Info, Plus } from 'lucide-react';
 import { motion } from 'framer-motion';
 import type { MediaItem } from '../services/api';
 import { useMovieData } from '../hooks/useMovieData';
+import { usePlayer } from '../utils/usePlayer';
+import { useImagePreloader } from '../hooks/useImagePreloader';
 
 interface MediaCardProps {
   media: MediaItem;
-  onPlay: (media: MediaItem) => void;
   onMoreInfo: (media: MediaItem) => void;
   onAddToList?: (media: MediaItem) => void;
   index?: number;
@@ -14,13 +15,12 @@ interface MediaCardProps {
 
 const MediaCard: React.FC<MediaCardProps> = ({ 
   media, 
-  onPlay, 
   onMoreInfo, 
   onAddToList, 
   index = 0 
 }) => {
   const [isHovered, setIsHovered] = React.useState(false);
-  const [imageError, setImageError] = React.useState(false);
+  const { startPlaying } = usePlayer();
   
   // Only fetch TMDB data for movies and series, not for music
   const shouldFetchTMDB = media.type === 'movie' || media.type === 'series';
@@ -36,6 +36,9 @@ const MediaCard: React.FC<MediaCardProps> = ({
   const displayPoster = media.type === 'music' 
     ? (media.poster || frenchPoster || poster)  // Music: use embedded artwork first
     : (frenchPoster || poster || media.poster); // Movies/Series: use TMDB first
+
+  // Preload the image to avoid flash
+  const { isLoaded: imageLoaded, error: imageError } = useImagePreloader(displayPoster || null);
   
   
   // Use TMDB release year as primary source, fallback to file year
@@ -48,8 +51,37 @@ const MediaCard: React.FC<MediaCardProps> = ({
     null;
 
   const getPlaceholderImage = () => {
-    const colors = ['bg-red-900', 'bg-blue-900', 'bg-green-900', 'bg-purple-900', 'bg-yellow-900'];
-    return colors[index % colors.length];
+    // Generate a gradient based on media title for unique colors
+    const hash = media.title.split('').reduce((a, b) => {
+      a = ((a << 5) - a) + b.charCodeAt(0);
+      return a & a;
+    }, 0);
+    
+    const hue = Math.abs(hash) % 360;
+    const gradientStart = `hsl(${hue}, 60%, 30%)`;
+    const gradientEnd = `hsl(${(hue + 60) % 360}, 60%, 20%)`;
+    
+    const typeIcon = media.type === 'movie' ? '🎬' : 
+                    media.type === 'series' ? '📺' : 
+                    media.type === 'music' ? '🎵' : '🎬';
+
+    return `data:image/svg+xml,${encodeURIComponent(`
+      <svg width="300" height="450" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:${gradientStart};stop-opacity:1" />
+            <stop offset="100%" style="stop-color:${gradientEnd};stop-opacity:1" />
+          </linearGradient>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#gradient)" />
+        <text x="50%" y="40%" font-family="Arial, sans-serif" font-size="60" text-anchor="middle" fill="white" opacity="0.3">
+          ${typeIcon}
+        </text>
+        <text x="50%" y="60%" font-family="Arial, sans-serif" font-size="16" text-anchor="middle" fill="white" opacity="0.8">
+          ${media.title.substring(0, 20)}${media.title.length > 20 ? '...' : ''}
+        </text>
+      </svg>
+    `)}`;
   };
 
   const getTypeIcon = () => {
@@ -64,6 +96,22 @@ const MediaCard: React.FC<MediaCardProps> = ({
         return '📁';
     }
   };
+
+  // Only render when:
+  // 1. Image is successfully loaded, OR
+  // 2. We're still loading TMDB data (show loading state), OR  
+  // 3. Image failed and we can show placeholder
+  const shouldRender = (displayPoster && imageLoaded) || loading || (imageError && displayPoster);
+  
+  if (!shouldRender) {
+    return (
+      <div className={`relative rounded-lg overflow-hidden bg-transparent ${
+        media.type === 'music' ? 'aspect-square' : 'aspect-[2/3]'
+      }`}>
+        {/* Invisible placeholder to maintain layout */}
+      </div>
+    );
+  }
 
   return (
     <motion.div
@@ -81,16 +129,20 @@ const MediaCard: React.FC<MediaCardProps> = ({
         media.type === 'music' ? 'aspect-square' : 'aspect-[2/3]'
       }`}>
         {/* Poster or Placeholder */}
-        {displayPoster && !imageError ? (
+        {displayPoster && imageLoaded && !imageError ? (
           <img 
             src={displayPoster} 
             alt={displayTitle}
             className="absolute inset-0 w-full h-full object-cover transition-opacity duration-300"
-            onError={() => setImageError(true)}
-            onLoad={() => setImageError(false)}
+          />
+        ) : !imageLoaded && displayPoster ? (
+          <img 
+            src={getPlaceholderImage()} 
+            alt={displayTitle}
+            className="absolute inset-0 w-full h-full object-cover"
           />
         ) : (
-          <div className={`absolute inset-0 flex flex-col items-center justify-center text-white ${getPlaceholderImage()}`}>
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-white bg-gray-800">
             <div className="text-center text-white p-4">
               {loading ? (
                 <div className="animate-spin text-5xl mb-4">⏳</div>
@@ -113,7 +165,7 @@ const MediaCard: React.FC<MediaCardProps> = ({
               <motion.button
                 onClick={(e) => {
                   e.stopPropagation();
-                  onPlay(media);
+                  startPlaying(media);
                 }}
                 className="bg-white/90 text-black p-3 rounded-full hover:bg-white transition-colors shadow-lg"
                 whileHover={{ scale: 1.1 }}
@@ -129,7 +181,7 @@ const MediaCard: React.FC<MediaCardProps> = ({
                   // Play first episode/movie in the group
                   const firstItem = media.episodes?.[0];
                   if (firstItem) {
-                    onPlay(firstItem);
+                    startPlaying(firstItem);
                   }
                 }}
                 className="bg-white/90 text-black p-3 rounded-full hover:bg-white transition-colors shadow-lg"

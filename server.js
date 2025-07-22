@@ -25,11 +25,24 @@ console.log('MEDIA_PATH:', MEDIA_PATH);
 console.log('TMDB_API_KEY configured:', !!TMDB_API_KEY);
 console.log('TMDB_API_KEY length:', TMDB_API_KEY ? TMDB_API_KEY.length : 0);
 
-// Performance caching
+// Advanced performance caching with LRU-like behavior
 const sshCache = new Map();
 const tmdbCache = new Map();
+const categoryCache = new Map();
 const SSH_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const TMDB_CACHE_TTL = 60 * 60 * 1000; // 1 hour
+const CATEGORY_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+const MAX_CACHE_SIZE = 1000;
+
+// LRU cache cleanup
+const cleanupCache = (cache, maxSize = MAX_CACHE_SIZE) => {
+  if (cache.size > maxSize) {
+    const entries = Array.from(cache.entries());
+    // Remove oldest 20% of entries
+    const toRemove = Math.floor(entries.length * 0.2);
+    entries.slice(0, toRemove).forEach(([key]) => cache.delete(key));
+  }
+};
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'dist')));
@@ -78,14 +91,23 @@ const executeSSH = (command) => {
         timestamp: Date.now()
       });
       
+      cleanupCache(sshCache);
+      
       resolve(stdout);
     });
   });
 };
 
-// Get all categories
+// Get all categories with aggressive caching
 app.get('/api/categories', async (_req, res) => {
   try {
+    // Check cache first
+    const cached = categoryCache.get('all_categories');
+    if (cached && Date.now() - cached.timestamp < CATEGORY_CACHE_TTL) {
+      res.set('Cache-Control', 'public, max-age=600'); // 10 minutes browser cache
+      return res.json(cached.data);
+    }
+
     let directories = [];
     
     if (USE_LOCAL_FILES) {
@@ -122,6 +144,15 @@ app.get('/api/categories', async (_req, res) => {
       })
     );
     
+    // Cache the result
+    categoryCache.set('all_categories', {
+      data: categories,
+      timestamp: Date.now()
+    });
+    
+    cleanupCache(categoryCache);
+    
+    res.set('Cache-Control', 'public, max-age=600'); // 10 minutes browser cache
     res.json(categories);
   } catch (error) {
     console.error('Error fetching categories:', error);
@@ -486,7 +517,7 @@ app.get('/api/poster/:title', async (req, res) => {
       const titleField = mediaType === 'tv' ? 'name' : 'title';
       let frenchTitle = mediaResult[titleField];
       let frenchOverview = mediaResult.overview;
-      let frenchPosterUrl = mediaResult.poster_path ? `https://image.tmdb.org/t/p/w500${mediaResult.poster_path}` : null;
+      let frenchPosterUrl = mediaResult.poster_path ? `https://image.tmdb.org/t/p/w342${mediaResult.poster_path}` : null;
       
       try {
         // Get French details
@@ -521,15 +552,15 @@ app.get('/api/poster/:title', async (req, res) => {
               return b.vote_average - a.vote_average;
             })[0];
             
-            frenchPosterUrl = `https://image.tmdb.org/t/p/w500${bestFrenchPoster.file_path}`;
+            frenchPosterUrl = `https://image.tmdb.org/t/p/w342${bestFrenchPoster.file_path}`;
           }
         }
       } catch (translationError) {
         console.error('Error fetching French content:', translationError);
       }
 
-      const posterUrl = mediaResult.poster_path ? `https://image.tmdb.org/t/p/w500${mediaResult.poster_path}` : null;
-      const backdropUrl = mediaResult.backdrop_path ? `https://image.tmdb.org/t/p/w1280${mediaResult.backdrop_path}` : null;
+      const posterUrl = mediaResult.poster_path ? `https://image.tmdb.org/t/p/w342${mediaResult.poster_path}` : null;
+      const backdropUrl = mediaResult.backdrop_path ? `https://image.tmdb.org/t/p/w780${mediaResult.backdrop_path}` : null;
       
       // Handle different date fields for movies vs TV shows
       const releaseDate = mediaType === 'tv' ? mediaResult.first_air_date : mediaResult.release_date;
@@ -753,8 +784,8 @@ const fetchMovieDataFromTMDB = async (title, year, type) => {
     const titleField = mediaType === 'tv' ? 'name' : 'title';
     
     const movieData = {
-      poster: result.poster_path ? `https://image.tmdb.org/t/p/w500${result.poster_path}` : null,
-      backdrop: result.backdrop_path ? `https://image.tmdb.org/t/p/w1280${result.backdrop_path}` : null,
+      poster: result.poster_path ? `https://image.tmdb.org/t/p/w342${result.poster_path}` : null,
+      backdrop: result.backdrop_path ? `https://image.tmdb.org/t/p/w780${result.backdrop_path}` : null,
       frenchTitle: result[titleField] || null,
       frenchDescription: result.overview || null
     };
@@ -1074,8 +1105,24 @@ const groupMediaItems = (mediaItems, category) => {
   
   // Normalize category name (both 'series'/'Series' and 'films'/'Films' should work)
   const normalizedCategory = category.toLowerCase();
-  if (normalizedCategory !== 'series' && normalizedCategory !== 'films') {
+  if (normalizedCategory !== 'series' && normalizedCategory !== 'films' && normalizedCategory !== 'musiques') {
     return mediaItems;
+  }
+  
+  // For music, just sort alphabetically without grouping
+  if (normalizedCategory === 'musiques') {
+    return mediaItems.sort((a, b) => {
+      const normalizeTitle = (title) => title
+        .toLowerCase()
+        .replace(/^(the|le|la|les|un|une|des|\[.*?\])\s+/i, '')
+        .replace(/[^\w\s]/g, '')
+        .trim();
+      
+      const titleA = normalizeTitle(a.title);
+      const titleB = normalizeTitle(b.title);
+      
+      return titleA.localeCompare(titleB, 'fr', { sensitivity: 'base' });
+    });
   }
   
   const groups = new Map();

@@ -39,7 +39,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   isVisible,
   startTime = 0,
   onMinimize,
-  isMinimized = false,
+  // isMinimized = false,
   onPlayerStateChange,
   mediaRef: externalMediaRef,
 }) => {
@@ -50,7 +50,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   // Determine which ref to use based on media type
   const mediaRef = media.type === "music" ? internalAudioRef : internalVideoRef;
 
-  console.log(isMinimized);
 
   // Update external ref if provided
   React.useEffect(() => {

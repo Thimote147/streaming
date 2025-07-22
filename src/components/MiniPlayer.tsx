@@ -2,21 +2,15 @@ import React, { useRef, useEffect, useState } from "react";
 import { Play, Pause, Volume2, VolumeX, X, Maximize2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { MediaItem } from "../services/api";
+import { streamingAPI } from "../services/api";
 
 interface MiniPlayerProps {
   media: MediaItem;
   isVisible: boolean;
   onClose: () => void;
   onMaximize: () => void;
-  currentTime: number;
-  duration: number;
-  isPlaying: boolean;
-  volume: number;
-  isMuted: boolean;
-  onPlayPause: () => void;
-  onVolumeChange: (volume: number) => void;
-  onSeek: (time: number) => void;
-  onToggleMute: () => void;
+  onTimeUpdate: (currentTime: number, duration: number) => void;
+  onPlayStateChange: (isPlaying: boolean) => void;
 }
 
 const MiniPlayer: React.FC<MiniPlayerProps> = ({
@@ -24,26 +18,120 @@ const MiniPlayer: React.FC<MiniPlayerProps> = ({
   isVisible,
   onClose,
   onMaximize,
-  currentTime,
-  duration,
-  isPlaying,
-  volume,
-  isMuted,
-  onPlayPause,
-  onVolumeChange,
-  onSeek,
-  onToggleMute,
+  onTimeUpdate,
+  onPlayStateChange,
 }) => {
   const [showControls, setShowControls] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [position, setPosition] = useState({ x: 20, y: 20 });
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [volume, setVolume] = useState(1);
+  const [isMuted, setIsMuted] = useState(false);
   const miniPlayerRef = useRef<HTMLDivElement>(null);
+  const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement>(null);
 
   const formatTime = (time: number) => {
+    if (isNaN(time)) return '0:00';
     const minutes = Math.floor(time / 60);
     const seconds = Math.floor(time % 60);
     return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+  };
+
+  // Initialize media element
+  useEffect(() => {
+    if (!media || !mediaRef.current) return;
+
+    const mediaElement = mediaRef.current;
+    const streamUrl = streamingAPI.getStreamUrl(media.path);
+    mediaElement.src = streamUrl;
+    mediaElement.volume = volume;
+    mediaElement.muted = isMuted;
+
+    const handleLoadedMetadata = () => {
+      setDuration(mediaElement.duration || 0);
+      onTimeUpdate(0, mediaElement.duration || 0);
+      // Auto-play when media is loaded
+      mediaElement.play().catch(console.error);
+    };
+
+    const handleTimeUpdate = () => {
+      const current = mediaElement.currentTime;
+      const total = mediaElement.duration || 0;
+      setCurrentTime(current);
+      onTimeUpdate(current, total);
+    };
+
+    const handlePlay = () => {
+      setIsPlaying(true);
+      onPlayStateChange(true);
+    };
+
+    const handlePause = () => {
+      setIsPlaying(false);
+      onPlayStateChange(false);
+    };
+
+    const handleEnded = () => {
+      setIsPlaying(false);
+      onPlayStateChange(false);
+    };
+
+    const handleError = (e: Event) => {
+      console.error('Media playback error:', e);
+    };
+
+    mediaElement.addEventListener('loadedmetadata', handleLoadedMetadata);
+    mediaElement.addEventListener('timeupdate', handleTimeUpdate);
+    mediaElement.addEventListener('play', handlePlay);
+    mediaElement.addEventListener('pause', handlePause);
+    mediaElement.addEventListener('ended', handleEnded);
+    mediaElement.addEventListener('error', handleError);
+
+    return () => {
+      mediaElement.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      mediaElement.removeEventListener('timeupdate', handleTimeUpdate);
+      mediaElement.removeEventListener('play', handlePlay);
+      mediaElement.removeEventListener('pause', handlePause);
+      mediaElement.removeEventListener('ended', handleEnded);
+      mediaElement.removeEventListener('error', handleError);
+    };
+  }, [media, volume, isMuted, onTimeUpdate, onPlayStateChange]);
+
+  const handlePlayPause = () => {
+    if (!mediaRef.current) return;
+    
+    if (isPlaying) {
+      mediaRef.current.pause();
+    } else {
+      mediaRef.current.play().catch(console.error);
+    }
+  };
+
+  const handleVolumeChange = (newVolume: number) => {
+    if (!mediaRef.current) return;
+    
+    setVolume(newVolume);
+    mediaRef.current.volume = newVolume;
+    setIsMuted(newVolume === 0);
+    mediaRef.current.muted = newVolume === 0;
+  };
+
+  const handleSeek = (time: number) => {
+    if (!mediaRef.current) return;
+    
+    mediaRef.current.currentTime = time;
+    setCurrentTime(time);
+  };
+
+  const handleToggleMute = () => {
+    if (!mediaRef.current) return;
+    
+    const newMuted = !isMuted;
+    setIsMuted(newMuted);
+    mediaRef.current.muted = newMuted;
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -103,6 +191,21 @@ const MiniPlayer: React.FC<MiniPlayerProps> = ({
         onMouseEnter={() => setShowControls(true)}
         onMouseLeave={() => setShowControls(false)}
       >
+        {/* Hidden Media Element */}
+        {media.type === 'music' ? (
+          <audio
+            ref={mediaRef as React.RefObject<HTMLAudioElement>}
+            style={{ display: 'none' }}
+            preload="auto"
+          />
+        ) : (
+          <video
+            ref={mediaRef as React.RefObject<HTMLVideoElement>}
+            style={{ display: 'none' }}
+            preload="auto"
+          />
+        )}
+
         {/* Video/Music Content */}
         {media.type === "music" ? (
           <div className="flex items-center h-full p-3">
@@ -131,7 +234,7 @@ const MiniPlayer: React.FC<MiniPlayerProps> = ({
                   min="0"
                   max={duration}
                   value={currentTime}
-                  onChange={(e) => onSeek(parseFloat(e.target.value))}
+                  onChange={(e) => handleSeek(parseFloat(e.target.value))}
                   className="w-full h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer mini-slider"
                 />
                 <div className="flex justify-between text-xs text-gray-400 mt-1">
@@ -165,7 +268,7 @@ const MiniPlayer: React.FC<MiniPlayerProps> = ({
                   min="0"
                   max={duration}
                   value={currentTime}
-                  onChange={(e) => onSeek(parseFloat(e.target.value))}
+                  onChange={(e) => handleSeek(parseFloat(e.target.value))}
                   className="w-full h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer mini-slider"
                 />
                 <div className="flex justify-between text-xs text-gray-400 mt-1">
@@ -192,7 +295,7 @@ const MiniPlayer: React.FC<MiniPlayerProps> = ({
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    onPlayPause();
+                    handlePlayPause();
                   }}
                   className="text-white hover:text-gray-300 transition-colors"
                 >
@@ -208,7 +311,7 @@ const MiniPlayer: React.FC<MiniPlayerProps> = ({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      onToggleMute();
+                      handleToggleMute();
                     }}
                     className="text-white hover:text-gray-300 transition-colors"
                   >
@@ -220,7 +323,7 @@ const MiniPlayer: React.FC<MiniPlayerProps> = ({
                     max="1"
                     step="0.1"
                     value={isMuted ? 0 : volume}
-                    onChange={(e) => onVolumeChange(parseFloat(e.target.value))}
+                    onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
                     className="w-12 h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer mini-slider"
                     onClick={(e) => e.stopPropagation()}
                   />

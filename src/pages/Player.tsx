@@ -1,30 +1,23 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import VideoPlayer from '../components/VideoPlayer';
-import MiniPlayer from '../components/MiniPlayer';
 import { streamingAPI } from '../services/api';
 import type { MediaItem } from '../services/api';
+import { usePlayer } from '../utils/usePlayer';
 
 const Player: React.FC = () => {
-  const { mediaId, mediaType, seriesTitle, seasonNumber, episodeNumber, title } = useParams<{ 
-    mediaId?: string;
-    mediaType?: string;
-    seriesTitle?: string;
-    seasonNumber?: string;
-    episodeNumber?: string;
+  const { setCurrentMedia, minimizePlayer } = usePlayer();
+  const { type, title, num, season, episode } = useParams<{ 
+    type?: string;
     title?: string;
+    num?: string;
+    season?: string;
+    episode?: string;
   }>();
   const [media, setMedia] = useState<MediaItem | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isMinimized, setIsMinimized] = useState(false);
-  const [playerState, setPlayerState] = useState({
-    currentTime: 0,
-    duration: 0,
-    isPlaying: false,
-    volume: 1,
-    isMuted: false,
-  });
+  const [isMinimized] = useState(false);
   const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement>(null);
   const navigate = useNavigate();
 
@@ -124,36 +117,6 @@ const Player: React.FC = () => {
       }
     };
 
-    const loadMediaById = async (id: string) => {
-      try {
-        setIsLoading(true);
-        
-        const categories = await streamingAPI.fetchCategories();
-        const allItems = categories.flatMap(cat => cat.items);
-        
-        const foundMedia = allItems.find(item => item.id === id);
-        
-        if (foundMedia) {
-          setMedia(foundMedia);
-        } else {
-          // Chercher dans les épisodes des groupes
-          const groups = allItems.filter(item => item.isGroup && item.episodes);
-          const allEpisodes = groups.flatMap(group => group.episodes || []);
-          const foundEpisode = allEpisodes.find(episode => episode.id === id);
-          
-          if (foundEpisode) {
-            setMedia(foundEpisode);
-          } else {
-            setError(`Média avec l'ID "${id}" introuvable`);
-          }
-        }
-      } catch (error) {
-        console.error('Error loading media:', error);
-        setError('Erreur lors du chargement du média');
-      } finally {
-        setIsLoading(false);
-      }
-    };
 
     const loadMusicByTitle = async (title: string) => {
       try {
@@ -189,29 +152,33 @@ const Player: React.FC = () => {
       }
     };
 
-    // Décider quelle fonction utiliser selon le format d'URL
-    const urlPath = window.location.pathname;
-    if (urlPath.startsWith('/player/musiques/')) {
-      const musicTitle = urlPath.split('/')[3];
-      loadMusicByTitle(musicTitle);
-      return;
+    // Handle new route format: /player/:type/:title/:num or /player/:type/:title/:season/:episode
+    if (type && title) {
+      if (season && episode) {
+        // Format: /player/series/title/s01/e01
+        loadEpisodeByReadableUrl(type, title, season, episode);
+      } else if (num) {
+        // Format: /player/films/title/1
+        loadMediaByReadableUrl(type, title, num);
+      } else if (type === 'musiques') {
+        // Format: /player/musiques/title
+        loadMusicByTitle(title);
+      } else {
+        // Format: /player/type/title (no sequel number)
+        loadMediaByReadableUrl(type, title, '1');
+      }
+    } else {
+      setError('URL de lecteur invalide');
+      setIsLoading(false);
     }
-    
-    if (mediaType && seriesTitle && seasonNumber && episodeNumber) {
-      // Format: /player/series/good_american_family/s01/e01
-      loadEpisodeByReadableUrl(mediaType, seriesTitle, seasonNumber, episodeNumber);
-    } else if (mediaType && seriesTitle && episodeNumber) {
-      // Format: /player/films/john_wick/1
-      loadMediaByReadableUrl(mediaType, seriesTitle, episodeNumber);
-    } else if (mediaType === 'musiques' && title) {
-      // Format: /player/musiques/safe_and_sound
-      console.log('🎵 [ROUTE] Détection route musique:', { mediaType, title });
-      loadMusicByTitle(title);
-    } else if (mediaId) {
-      // Format: /player/film_john_wick_1_1_56e4f0
-      loadMediaById(decodeURIComponent(mediaId));
+  }, [type, title, num, season, episode, navigate]);
+
+  // Set current media in global context when media loads
+  useEffect(() => {
+    if (media && !isMinimized) {
+      setCurrentMedia(media);
     }
-  }, [mediaId, mediaType, seriesTitle, seasonNumber, episodeNumber, title, navigate]);
+  }, [media, isMinimized, setCurrentMedia]);
 
 
   const handleClose = () => {
@@ -219,54 +186,13 @@ const Player: React.FC = () => {
   };
 
   const handleMinimize = () => {
-    setIsMinimized(true);
-  };
-
-  const handleMaximize = () => {
-    setIsMinimized(false);
-  };
-
-  const handlePlayPause = () => {
-    if (mediaRef.current) {
-      if (playerState.isPlaying) {
-        mediaRef.current.pause();
-      } else {
-        mediaRef.current.play().catch(console.error);
-      }
+    if (media) {
+      setCurrentMedia(media);
+      minimizePlayer();
+      navigate(-1); // Go back to previous page but keep playing
     }
   };
 
-  const handlePlayerStateChange = (state: {
-    currentTime: number;
-    duration: number;
-    isPlaying: boolean;
-    volume: number;
-    isMuted: boolean;
-  }) => {
-    setPlayerState(state);
-  };
-
-  const handleVolumeChange = (volume: number) => {
-    if (mediaRef.current) {
-      mediaRef.current.volume = volume;
-      setPlayerState(prev => ({ ...prev, volume, isMuted: volume === 0 }));
-    }
-  };
-
-  const handleSeek = (time: number) => {
-    if (mediaRef.current) {
-      mediaRef.current.currentTime = time;
-      setPlayerState(prev => ({ ...prev, currentTime: time }));
-    }
-  };
-
-  const handleToggleMute = () => {
-    if (mediaRef.current) {
-      const newMuted = !playerState.isMuted;
-      mediaRef.current.muted = newMuted;
-      setPlayerState(prev => ({ ...prev, isMuted: newMuted }));
-    }
-  };
 
   if (isLoading) {
     return (
@@ -315,6 +241,8 @@ const Player: React.FC = () => {
     );
   }
 
+  console.log('[DEBUG] Player render:', { media: media?.title, isMinimized, showPlayer: !isMinimized });
+
   return (
     <>
       {!isMinimized && (
@@ -324,28 +252,10 @@ const Player: React.FC = () => {
           onMinimize={handleMinimize}
           isVisible={true}
           isMinimized={isMinimized}
-          onPlayerStateChange={handlePlayerStateChange}
           mediaRef={mediaRef}
         />
       )}
       
-      {isMinimized && (
-        <MiniPlayer
-          media={media}
-          isVisible={isMinimized}
-          onClose={handleClose}
-          onMaximize={handleMaximize}
-          currentTime={playerState.currentTime}
-          duration={playerState.duration}
-          isPlaying={playerState.isPlaying}
-          volume={playerState.volume}
-          isMuted={playerState.isMuted}
-          onPlayPause={handlePlayPause}
-          onVolumeChange={handleVolumeChange}
-          onSeek={handleSeek}
-          onToggleMute={handleToggleMute}
-        />
-      )}
     </>
   );
 };

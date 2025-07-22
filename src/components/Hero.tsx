@@ -1,17 +1,24 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { Play, Info } from 'lucide-react';
 import { motion } from 'framer-motion';
 import type { MediaItem } from '../services/api';
 import { useMovieData } from '../hooks/useMovieData';
+import { HeroSkeleton } from './SkeletonLoader';
+import { usePlayer } from '../utils/usePlayer';
 
 interface HeroProps {
   featuredMedia?: MediaItem;
-  onPlay: (media: MediaItem) => void;
   onMoreInfo: (media: MediaItem) => void;
 }
 
-const Hero: React.FC<HeroProps> = ({ featuredMedia, onPlay, onMoreInfo }) => {
+const Hero: React.FC<HeroProps> = memo(({ featuredMedia, onMoreInfo }) => {
   const { poster, backdrop, frenchTitle, frenchDescription, releaseYear } = useMovieData(featuredMedia?.title || '', featuredMedia?.year, featuredMedia?.type);
+  const { startPlaying } = usePlayer();
+
+  // Show skeleton only for initial load when we have no media at all
+  if (!featuredMedia) {
+    return <HeroSkeleton />;
+  }
 
   const defaultFeaturedMedia: MediaItem = {
     id: 'featured',
@@ -35,32 +42,18 @@ const Hero: React.FC<HeroProps> = ({ featuredMedia, onPlay, onMoreInfo }) => {
       {/* Background Image/Video */}
       <div className="absolute inset-0">
         {/* Movie Backdrop/Poster Background */}
-        {(backdrop || poster) && featuredMedia ? (
-          <div 
-            className="absolute inset-0 bg-no-repeat bg-center"
-            style={{
-              backgroundImage: `url(${backdrop || poster})`,
-              backgroundSize: backdrop ? 'cover' : 'cover',
-              backgroundPosition: 'center top',
-            }}
-          />
-        ) : (
-          <div className="absolute inset-0 bg-gradient-to-r from-gray-900 via-gray-800 to-black" />
-        )}
+        <div 
+          className="absolute inset-0 bg-no-repeat bg-center transition-all duration-500"
+          style={{
+            backgroundImage: (backdrop || poster) ? `url(${backdrop || poster})` : 'linear-gradient(to right, #111827, #1f2937, #000000)',
+            backgroundSize: 'cover',
+            backgroundPosition: 'center top',
+          }}
+        />
         
         {/* Responsive gradient overlays with smooth transitions */}
         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-black/20 transition-all duration-700 ease-in-out" />
         <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/40 to-transparent transition-all duration-700 ease-in-out" />
-        
-        {/* Pattern overlay for non-poster/backdrop backgrounds */}
-        {!backdrop && !poster && (
-          <div className="absolute inset-0 opacity-5">
-            <div className="h-full w-full bg-repeat" style={{
-              backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.1'%3E%3Ccircle cx='30' cy='30' r='4'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
-              backgroundSize: '60px 60px'
-            }} />
-          </div>
-        )}
       </div>
 
       {/* Content */}
@@ -122,7 +115,7 @@ const Hero: React.FC<HeroProps> = ({ featuredMedia, onPlay, onMoreInfo }) => {
               transition={{ duration: 0.8, delay: 0.8 }}
             >
               <motion.button
-                onClick={() => onPlay(media)}
+                onClick={() => startPlaying(media)}
                 className="bg-white text-black px-4 sm:px-6 py-3 rounded-lg font-semibold hover:bg-gray-200 transition-all duration-300 flex items-center justify-center gap-2 text-sm sm:text-base shadow-lg backdrop-blur-sm"
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
@@ -146,6 +139,8 @@ const Hero: React.FC<HeroProps> = ({ featuredMedia, onPlay, onMoreInfo }) => {
       </div>
     </div>
   );
-};
+});
+
+Hero.displayName = 'Hero';
 
 export default Hero;

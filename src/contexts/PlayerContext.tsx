@@ -1,6 +1,9 @@
-import React, { useState, useRef, type ReactNode } from 'react';
+import React, { useState, type ReactNode } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { MediaItem } from '../services/api';
+import { streamingAPI } from '../services/api';
 import { PlayerContext } from '../utils/usePlayer';
+import { cleanTitleForUrl, extractTitleAndSequel } from '../utils/urlUtils';
 
 export interface PlayerState {
   currentTime: number;
@@ -15,21 +18,19 @@ export interface PlayerContextType {
   currentMedia: MediaItem | null;
   isMinimized: boolean;
   playerState: PlayerState;
-  mediaRef: React.RefObject<HTMLVideoElement | HTMLAudioElement | null>;
   
   // Actions
   setCurrentMedia: (media: MediaItem | null) => void;
   setIsMinimized: (minimized: boolean) => void;
-  setPlayerState: (state: PlayerState) => void;
+  updatePlayerState: (updates: Partial<PlayerState>) => void;
   closePlayer: () => void;
   minimizePlayer: () => void;
   maximizePlayer: () => void;
+  startPlaying: (media: MediaItem, shouldMinimize?: boolean) => Promise<void>;
   
-  // Media controls
-  playPause: () => void;
-  setVolume: (volume: number) => void;
-  seek: (time: number) => void;
-  toggleMute: () => void;
+  // Callbacks for MiniPlayer
+  onTimeUpdate: (currentTime: number, duration: number) => void;
+  onPlayStateChange: (isPlaying: boolean) => void;
 }
 
 export interface PlayerProviderProps {
@@ -37,6 +38,7 @@ export interface PlayerProviderProps {
 }
 
 export const PlayerProvider: React.FC<PlayerProviderProps> = ({ children }) => {
+  const navigate = useNavigate();
   const [currentMedia, setCurrentMedia] = useState<MediaItem | null>(null);
   const [isMinimized, setIsMinimized] = useState(false);
   const [playerState, setPlayerState] = useState<PlayerState>({
@@ -46,8 +48,6 @@ export const PlayerProvider: React.FC<PlayerProviderProps> = ({ children }) => {
     volume: 1,
     isMuted: false,
   });
-  
-  const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement>(null);
 
   const closePlayer = () => {
     setCurrentMedia(null);
@@ -69,35 +69,91 @@ export const PlayerProvider: React.FC<PlayerProviderProps> = ({ children }) => {
     setIsMinimized(false);
   };
 
-  const playPause = () => {
-    if (mediaRef.current) {
-      if (playerState.isPlaying) {
-        mediaRef.current.pause();
+  const updatePlayerState = (updates: Partial<PlayerState>) => {
+    setPlayerState(prev => ({ ...prev, ...updates }));
+  };
+
+  const onTimeUpdate = (currentTime: number, duration: number) => {
+    setPlayerState(prev => ({ ...prev, currentTime, duration }));
+  };
+
+  const onPlayStateChange = (isPlaying: boolean) => {
+    setPlayerState(prev => ({ ...prev, isPlaying }));
+  };
+
+  const checkIfPartOfSaga = async (media: MediaItem): Promise<boolean> => {
+    try {
+      if (media.type !== 'movie') return false;
+      
+      const categories = await streamingAPI.fetchCategories();
+      const filmsCategory = categories.find(cat => cat.type === 'Films');
+      const allFilms = filmsCategory?.items || [];
+      
+      // Check if there are other films with the same base title
+      const { baseTitle } = extractTitleAndSequel(media.title);
+      const relatedFilms = allFilms.filter(film => {
+        if (film.id === media.id) return false; // Exclude current film
+        const { baseTitle: otherBaseTitle } = extractTitleAndSequel(film.title);
+        return baseTitle === otherBaseTitle;
+      });
+      
+      return relatedFilms.length > 0;
+    } catch (error) {
+      console.error('Error checking saga:', error);
+      return false;
+    }
+  };
+
+  const startPlaying = async (media: MediaItem, shouldMinimize = false) => {
+    setCurrentMedia(media);
+    setIsMinimized(shouldMinimize);
+    setPlayerState(prev => ({
+      ...prev,
+      currentTime: 0,
+      duration: 0,
+      isPlaying: false, // Will be set to true by Player when it starts
+    }));
+    
+    // If not minimizing, navigate to the player page
+    if (!shouldMinimize) {
+      let navigationUrl: string;
+      
+      if (media.type === 'music') {
+        const cleanTitle = cleanTitleForUrl(media.title);
+        navigationUrl = `/player/musiques/${cleanTitle}`;
+      } else if (media.type === 'series') {
+        // Handle series episodes
+        if (media.seasonNumber && media.episodeNumber) {
+          const cleanTitle = cleanTitleForUrl(media.seriesTitle || media.title);
+          const season = `s${media.seasonNumber.toString().padStart(2, '0')}`;
+          const episode = `e${media.episodeNumber.toString().padStart(2, '0')}`;
+          navigationUrl = `/player/series/${cleanTitle}/${season}/${episode}`;
+        } else {
+          const cleanTitle = cleanTitleForUrl(media.title);
+          navigationUrl = `/player/series/${cleanTitle}`;
+        }
+      } else if (media.type === 'movie') {
+        // Handle movies with sequel numbers
+        const { baseTitle, sequelNumber } = extractTitleAndSequel(media.title);
+        const finalSequelNumber = media.sequelNumber || sequelNumber || 1;
+        
+        // Check if this movie is part of a saga
+        const isPartOfSaga = await checkIfPartOfSaga(media);
+        
+        if (isPartOfSaga || sequelNumber || media.sequelNumber || media.isGroup) {
+          // Always include number for saga movies
+          navigationUrl = `/player/films/${baseTitle}/${finalSequelNumber}`;
+        } else {
+          // Standalone movie, no number needed
+          navigationUrl = `/player/films/${baseTitle}`;
+        }
       } else {
-        mediaRef.current.play().catch(console.error);
+        // Fallback for other media types
+        const cleanTitle = cleanTitleForUrl(media.title);
+        navigationUrl = `/player/${media.type}/${cleanTitle}`;
       }
-    }
-  };
-
-  const setVolume = (volume: number) => {
-    if (mediaRef.current) {
-      mediaRef.current.volume = volume;
-      setPlayerState(prev => ({ ...prev, volume, isMuted: volume === 0 }));
-    }
-  };
-
-  const seek = (time: number) => {
-    if (mediaRef.current) {
-      mediaRef.current.currentTime = time;
-      setPlayerState(prev => ({ ...prev, currentTime: time }));
-    }
-  };
-
-  const toggleMute = () => {
-    if (mediaRef.current) {
-      const newMuted = !playerState.isMuted;
-      mediaRef.current.muted = newMuted;
-      setPlayerState(prev => ({ ...prev, isMuted: newMuted }));
+      
+      navigate(navigationUrl);
     }
   };
 
@@ -105,17 +161,15 @@ export const PlayerProvider: React.FC<PlayerProviderProps> = ({ children }) => {
     currentMedia,
     isMinimized,
     playerState,
-    mediaRef,
     setCurrentMedia,
     setIsMinimized,
-    setPlayerState,
+    updatePlayerState,
     closePlayer,
     minimizePlayer,
     maximizePlayer,
-    playPause,
-    setVolume,
-    seek,
-    toggleMute,
+    startPlaying,
+    onTimeUpdate,
+    onPlayStateChange,
   };
 
   return (

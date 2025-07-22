@@ -14,16 +14,14 @@ import UserProfile from './components/Profile/UserProfile';
 import MiniPlayer from './components/MiniPlayer';
 import { usePlayer } from './utils/usePlayer';
 
-const AppContent = () => {
+const AppRoutes = () => {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
-  const { currentMedia, isMinimized, playerState, closePlayer, maximizePlayer, playPause, setVolume, seek, toggleMute } = usePlayer();
+  const { currentMedia, isMinimized, closePlayer, maximizePlayer, onTimeUpdate, onPlayStateChange } = usePlayer();
 
   return (
-    <AuthProvider>
-      <Router>
-        <div className="min-h-screen bg-black">
-          <Routes>
+    <div className="min-h-screen bg-black">
+      <Routes>
             <Route path="/" element={
               <ProtectedRoute 
                 onShowAuth={() => setShowAuthModal(true)}
@@ -48,7 +46,7 @@ const AppContent = () => {
                 <Search />
               </ProtectedRoute>
             } />
-            <Route path="/player/musiques/:title" element={
+            <Route path="/player/:type/:title" element={
               <ProtectedRoute 
                 onShowAuth={() => setShowAuthModal(true)}
                 onShowProfile={() => setShowProfileModal(true)}
@@ -56,7 +54,7 @@ const AppContent = () => {
                 <Player />
               </ProtectedRoute>
             } />
-            <Route path="/player/:mediaType/:seriesTitle/:seasonNumber/:episodeNumber" element={
+            <Route path="/player/:type/:title/:num" element={
               <ProtectedRoute 
                 onShowAuth={() => setShowAuthModal(true)}
                 onShowProfile={() => setShowProfileModal(true)}
@@ -64,15 +62,7 @@ const AppContent = () => {
                 <Player />
               </ProtectedRoute>
             } />
-            <Route path="/player/:mediaType/:seriesTitle/:episodeNumber" element={
-              <ProtectedRoute 
-                onShowAuth={() => setShowAuthModal(true)}
-                onShowProfile={() => setShowProfileModal(true)}
-              >
-                <Player />
-              </ProtectedRoute>
-            } />
-            <Route path="/player/:mediaId" element={
+            <Route path="/player/:type/:title/:season/:episode" element={
               <ProtectedRoute 
                 onShowAuth={() => setShowAuthModal(true)}
                 onShowProfile={() => setShowProfileModal(true)}
@@ -127,18 +117,21 @@ const AppContent = () => {
               isVisible={isMinimized}
               onClose={closePlayer}
               onMaximize={maximizePlayer}
-              currentTime={playerState.currentTime}
-              duration={playerState.duration}
-              isPlaying={playerState.isPlaying}
-              volume={playerState.volume}
-              isMuted={playerState.isMuted}
-              onPlayPause={playPause}
-              onVolumeChange={setVolume}
-              onSeek={seek}
-              onToggleMute={toggleMute}
+              onTimeUpdate={onTimeUpdate}
+              onPlayStateChange={onPlayStateChange}
             />
           )}
-        </div>
+    </div>
+  );
+};
+
+const AppContent = () => {
+  return (
+    <AuthProvider>
+      <Router>
+        <PlayerProvider>
+          <AppRoutes />
+        </PlayerProvider>
       </Router>
     </AuthProvider>
   );
@@ -147,9 +140,7 @@ const AppContent = () => {
 function App() {
   return (
     <AuthProvider>
-      <PlayerProvider>
-        <AppContent />
-      </PlayerProvider>
+      <AppContent />
     </AuthProvider>
   );
 }

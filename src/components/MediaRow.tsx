@@ -7,7 +7,6 @@ import MediaCard from './MediaCard';
 interface MediaRowProps {
   title: string;
   items: MediaItem[];
-  onPlay: (media: MediaItem) => void;
   onMoreInfo: (media: MediaItem) => void;
   onAddToList?: (media: MediaItem) => void;
   useHorizontalScroll?: boolean;
@@ -17,7 +16,6 @@ interface MediaRowProps {
 const MediaRow: React.FC<MediaRowProps> = ({ 
   title, 
   items, 
-  onPlay, 
   onMoreInfo, 
   onAddToList,
   useHorizontalScroll = false,
@@ -115,7 +113,6 @@ const MediaRow: React.FC<MediaRowProps> = ({
               <div key={media.id} className="flex-shrink-0 w-40 md:w-44">
                 <MediaCard
                   media={media}
-                  onPlay={onPlay}
                   onMoreInfo={onMoreInfo}
                   onAddToList={onAddToList}
                   index={index}
@@ -131,7 +128,6 @@ const MediaRow: React.FC<MediaRowProps> = ({
             <div key={media.id} className="w-full">
               <MediaCard
                 media={media}
-                onPlay={onPlay}
                 onMoreInfo={onMoreInfo}
                 onAddToList={onAddToList}
                 index={index}
