@@ -1,4 +1,5 @@
 import React, { lazy, Suspense } from 'react';
+import type { TargetAndTransition, Transition, VariantLabels } from 'framer-motion';
 
 // Lazy load Framer Motion to reduce initial bundle size
 const LazyMotionDiv = lazy(() => 
@@ -11,11 +12,11 @@ interface LazyMotionProps {
   children: React.ReactNode;
   className?: string;
   style?: React.CSSProperties;
-  initial?: any;
-  animate?: any;
-  transition?: any;
-  whileHover?: any;
-  whileTap?: any;
+  initial?: boolean | TargetAndTransition | VariantLabels;
+  animate?: boolean | TargetAndTransition | VariantLabels;
+  transition?: Transition;
+  whileHover?: TargetAndTransition | VariantLabels;
+  whileTap?: TargetAndTransition | VariantLabels;
   onClick?: () => void;
 }
 

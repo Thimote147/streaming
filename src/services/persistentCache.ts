@@ -1,5 +1,5 @@
-interface CacheItem {
-  data: any;
+interface CacheItem<T = unknown> {
+  data: T;
   timestamp: number;
   ttl: number;
 }
@@ -53,12 +53,12 @@ class PersistentCache {
     return this.db!;
   }
 
-  async set(store: string, key: string, data: any, ttl: number = 3600000): Promise<void> {
+  async set<T>(store: string, key: string, data: T, ttl: number = 3600000): Promise<void> {
     const db = await this.ensureDB();
     const transaction = db.transaction([store], 'readwrite');
     const objectStore = transaction.objectStore(store);
     
-    const item: CacheItem = {
+    const item: CacheItem<T> = {
       data,
       timestamp: Date.now(),
       ttl
@@ -67,17 +67,17 @@ class PersistentCache {
     await objectStore.put({ id: key, ...item });
   }
 
-  async get(store: string, key: string): Promise<any> {
+  async get<T = unknown>(store: string, key: string): Promise<T | null> {
     try {
       const db = await this.ensureDB();
       const transaction = db.transaction([store], 'readonly');
       const objectStore = transaction.objectStore(store);
       
-      return new Promise((resolve) => {
+      return new Promise<T | null>((resolve) => {
         const request = objectStore.get(key);
         
         request.onsuccess = () => {
-          const result = request.result;
+          const result = request.result as (CacheItem<T> & { id: string }) | undefined;
           
           if (!result) {
             resolve(null);
@@ -127,7 +127,7 @@ class PersistentCache {
   async cacheImage(url: string): Promise<string | null> {
     try {
       // Check if already cached
-      const cached = await this.get('images', url);
+      const cached = await this.get<string>('images', url);
       if (cached) {
         return cached;
       }

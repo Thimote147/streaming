@@ -1,5 +1,18 @@
 import { persistentCache } from './persistentCache';
 
+interface TMDBData {
+  poster: string | null;
+  frenchPoster?: string;
+  backdrop: string | null;
+  frenchTitle?: string;
+  frenchDescription?: string;
+  releaseDate?: string;
+  releaseYear?: number;
+  genres?: number[];
+  voteAverage?: number;
+  voteCount?: number;
+}
+
 export interface MediaItem {
   id: string;
   title: string;
@@ -43,7 +56,7 @@ class StreamingAPI {
   async fetchCategories(): Promise<MediaCategory[]> {
     try {
       // Try cache first
-      const cached = await persistentCache.get('categories', 'all');
+      const cached = await persistentCache.get<MediaCategory[]>('categories', 'all');
       if (cached) {
         // Return cached data immediately, but refresh in background
         this.refreshCategoriesInBackground();
@@ -118,13 +131,13 @@ class StreamingAPI {
     return data?.backdrop || null;
   }
 
-  async fetchMovieData(title: string, year?: number, type?: string): Promise<{poster: string | null, frenchPoster?: string, backdrop: string | null, frenchTitle?: string, frenchDescription?: string, releaseDate?: string, releaseYear?: number, genres?: number[], voteAverage?: number, voteCount?: number} | null> {
+  async fetchMovieData(title: string, year?: number, type?: string): Promise<TMDBData | null> {
     try {
       const cleanTitle = this.cleanMovieTitle(title);
       const cacheKey = `${cleanTitle}_${year || 'unknown'}_${type || 'movie'}`;
       
       // Check persistent cache first
-      const persistentCached = await persistentCache.get('tmdb', cacheKey);
+      const persistentCached = await persistentCache.get<TMDBData>('tmdb', cacheKey);
       if (persistentCached) {
         // Cache images in background if not already done - disabled due to CORS issues
         // this.cacheImagesInBackground(persistentCached);

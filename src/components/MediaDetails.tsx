@@ -142,121 +142,121 @@ const MediaDetails: React.FC<MediaDetailsProps> = ({
       </div>
 
       {/* Mobile Layout */}
-      <div className="md:hidden relative z-10 overflow-y-auto h-full pt-0 px-4 sm:px-6 pb-8">
+      <div className="md:hidden relative z-10 overflow-y-auto h-full pt-4 px-4 sm:px-6 pb-24">
         {/* Mobile Title */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.3 }}
-          className="mb-4"
+          className="mb-6"
         >
-          <h1 className="text-xl sm:text-2xl font-bold text-white leading-tight">
+          <h1 className="text-2xl sm:text-3xl font-bold text-white leading-tight">
             {displayTitle}
           </h1>
         </motion.div>
 
         {/* Mobile Poster and Info */}
-        <div className="flex gap-3 sm:gap-4 mb-6">
-          <motion.div
-            className="relative rounded-lg overflow-hidden shadow-2xl w-32 sm:w-40 flex-shrink-0"
-            style={{ aspectRatio: media.type === 'music' ? '1/1' : '2/3' }}
-            initial={{ opacity: 0, x: -50 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.6, delay: 0.2 }}
-          >
-            {displayPoster ? (
-              <img 
-                src={displayPoster} 
-                alt={displayTitle}
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <div className="w-full h-full bg-gray-800 flex items-center justify-center">
-                <div className="text-center text-gray-400">
-                  <div className="text-2xl mb-1">🎬</div>
-                  <div className="text-xs">{displayTitle}</div>
+        <div className="mb-6">
+          {/* Mobile Poster */}
+          <div className="flex justify-center mb-4">
+            <motion.div
+              className="relative rounded-lg overflow-hidden shadow-2xl w-48 sm:w-56"
+              style={{ aspectRatio: media.type === 'music' ? '1/1' : '2/3' }}
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.2 }}
+            >
+              {displayPoster ? (
+                <img 
+                  src={displayPoster} 
+                  alt={displayTitle}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full bg-gray-800 flex items-center justify-center">
+                  <div className="text-center text-gray-400">
+                    <div className="text-4xl mb-3">🎬</div>
+                    <div className="text-sm px-3">{displayTitle}</div>
+                  </div>
                 </div>
-              </div>
-            )}
-          </motion.div>
-          
-          {/* Mobile Info */}
-          <div className="flex-1 space-y-4">
-            {/* Action Buttons */}
-            <div className="flex flex-col space-y-2">
+              )}
+            </motion.div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex flex-col space-y-2 mb-4">
+            <motion.button
+              onClick={() => onPlay(media)}
+              className="bg-white text-black px-4 py-3 rounded-lg font-semibold hover:bg-gray-200 transition-colors flex items-center justify-center gap-2 text-sm"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+            >
+              <Play size={18} fill="currentColor" />
+              <span>{getPlayButtonText()}</span>
+            </motion.button>
+            
+            {onAddToList && (
               <motion.button
-                onClick={() => onPlay(media)}
-                className="bg-white text-black px-4 py-2 rounded-lg font-semibold hover:bg-gray-200 transition-colors flex items-center justify-center gap-2 text-sm"
+                onClick={() => onAddToList(media)}
+                className="bg-gray-600 text-white px-4 py-3 rounded-lg font-semibold hover:bg-gray-500 transition-colors flex items-center justify-center gap-2 text-sm"
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
               >
-                <Play size={16} fill="currentColor" />
-                <span>{getPlayButtonText()}</span>
+                <Plus size={18} />
+                <span>Ma liste</span>
               </motion.button>
-              
-              {onAddToList && (
-                <motion.button
-                  onClick={() => onAddToList(media)}
-                  className="bg-gray-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-gray-500 transition-colors flex items-center justify-center gap-2 text-sm"
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                >
-                  <Plus size={16} />
-                  <span>Ma liste</span>
-                </motion.button>
-              )}
-            </div>
-            
-            {/* Mobile Meta Info */}
-            <div className="space-y-2 text-xs">
-              {displayYear && (
-                <div className="flex items-center space-x-1 text-gray-300">
-                  <Calendar size={12} />
-                  <span>{displayYear}</span>
-                </div>
-              )}
-              {media.genre && (
-                <span className="bg-gray-700 text-white px-2 py-1 rounded-full">
-                  {media.genre}
-                </span>
-              )}
-              <span className="bg-red-600 text-white px-2 py-1 rounded-full capitalize">
-                {media.type === 'movie' ? 'Film' : media.type === 'series' ? 'Série' : 'Musique'}
+            )}
+          </div>
+          
+          {/* Mobile Meta Info */}
+          <div className="flex items-center justify-center flex-wrap gap-4 text-center">
+            {displayYear && (
+              <div className="flex items-center space-x-2 text-gray-300">
+                <Calendar size={16} />
+                <span className="text-base">{displayYear}</span>
+              </div>
+            )}
+            {media.genre && (
+              <span className="bg-gray-700 text-white px-4 py-2 rounded-full text-sm">
+                {media.genre}
               </span>
-            </div>
+            )}
+            <span className="bg-red-600 text-white px-4 py-2 rounded-full text-sm capitalize">
+              {media.type === 'movie' ? 'Film' : media.type === 'series' ? 'Série' : 'Musique'}
+            </span>
           </div>
         </div>
         
         {/* Mobile Description and Episodes */}
         <div className="space-y-6">
           <div>
-            <h3 className="text-lg font-semibold text-white mb-3">Synopsis</h3>
-            <p className="text-gray-300 leading-relaxed text-sm">
+            <h3 className="text-xl font-semibold text-white mb-4">Synopsis</h3>
+            <p className="text-gray-300 leading-relaxed text-base">
               {displayDescription || `Découvrez ${displayTitle}, un ${media.type === 'movie' ? 'film' : media.type === 'series' ? 'série' : 'contenu musical'} captivant disponible sur votre plateforme de streaming personnelle.`}
             </p>
           </div>
           
           {isGroup && (
             <div>
-              <h3 className="text-lg font-semibold text-white mb-3">
+              <h3 className="text-xl font-semibold text-white mb-4">
                 {media.type === 'series' ? 'Épisodes' : 'Films de la saga'}
               </h3>
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {media.episodes?.map((episode) => (
                   <div
                     key={episode.id}
-                    className="flex items-center p-3 bg-gray-800/50 rounded-lg hover:bg-gray-700/50 transition-colors cursor-pointer"
+                    className="flex items-center p-4 bg-gray-800/50 rounded-lg hover:bg-gray-700/50 transition-colors cursor-pointer"
                     onClick={() => onPlay(episode)}
                   >
-                    <div className="flex-1">
-                      <div className="font-medium text-white text-sm">{episode.title}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-white text-base truncate">{episode.title}</div>
                       {episode.seasonNumber && episode.episodeNumber && (
-                        <div className="text-gray-400 text-xs">
+                        <div className="text-gray-400 text-sm mt-1">
                           S{episode.seasonNumber.toString().padStart(2, '0')}E{episode.episodeNumber.toString().padStart(2, '0')}
                         </div>
                       )}
                     </div>
-                    <Play size={16} className="text-gray-400" />
+                    <Play size={20} className="text-gray-400 ml-2 flex-shrink-0" />
                   </div>
                 ))}
               </div>
