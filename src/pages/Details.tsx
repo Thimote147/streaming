@@ -3,7 +3,6 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import MediaDetails from '../components/MediaDetails';
 import { streamingAPI } from '../services/api';
-import { cleanTitleForUrl } from '../utils/urlUtils';
 import { useWatchProgress } from '../hooks/useWatchProgress';
 import type { MediaItem } from '../services/api';
 import type { WatchProgress } from '../lib/supabase';
@@ -114,69 +113,6 @@ const Details: React.FC = () => {
     }
   }, [media, recentProgress]);
 
-
-  const handlePlay = (media: MediaItem) => {
-    
-    let navigationUrl: string;
-    
-    // 1. Détecter si c'est un épisode (seasonNumber et episodeNumber existent)
-    if (media.seasonNumber && media.episodeNumber) {
-      
-      // Utiliser seriesTitle si disponible, sinon le titre du média
-      const seriesName = media.seriesTitle || media.title;
-      const cleanSeriesName = cleanTitleForUrl(seriesName);
-      
-      // Formater les numéros avec un zéro initial si nécessaire
-      const seasonFormatted = media.seasonNumber.toString().padStart(2, '0');
-      const episodeFormatted = media.episodeNumber.toString().padStart(2, '0');
-      
-      // Générer l'URL au format /player/series/nom_serie/s{seasonNumber}/e{episodeNumber}
-      navigationUrl = `/player/series/${cleanSeriesName}/s${seasonFormatted}/e${episodeFormatted}`;
-      console.log('🔗 URL d\'épisode générée:', navigationUrl);
-      console.log('📝 Nom de série nettoyé:', cleanSeriesName);
-    } 
-    // 2. Vérifier si le média a une propriété sequelNumber (film de saga)
-    else if (media.sequelNumber && media.type === 'movie') {
-      console.log('🎭 Détection d\'un film de saga avec sequelNumber:', media.sequelNumber);
-      
-      // Extraire le nom de base de la série (enlever le numéro à la fin)
-      const baseTitle = media.title
-        .replace(/\s+\d+$/g, '') // Enlever les nombres à la fin (ex: "John Wick 4" -> "John Wick")
-        .replace(/\s+(I{1,4}|V|VI{1,3}|IX|X)$/g, ''); // Enlever les chiffres romains à la fin
-      
-      const baseName = cleanTitleForUrl(baseTitle);
-      
-      // Générer l'URL au format /player/films/nom_serie/numero
-      navigationUrl = `/player/films/${baseName}/${media.sequelNumber}`;
-      console.log('🔗 URL de saga générée:', navigationUrl);
-      console.log('📝 Nom de base extrait:', baseName);
-    } else if (media.sequelNumber && media.type === 'series') {
-      // Cas des séries avec sequelNumber
-      console.log('📺 Détection d\'une série avec sequelNumber:', media.sequelNumber);
-      
-      const baseTitle = media.title
-        .replace(/\s+\d+$/g, '')
-        .replace(/\s+(I{1,4}|V|VI{1,3}|IX|X)$/g, '');
-      
-      const baseName = cleanTitleForUrl(baseTitle);
-      
-      navigationUrl = `/player/series/${baseName}/${media.sequelNumber}`;
-      console.log('🔗 URL de série générée:', navigationUrl);
-      console.log('📝 Nom de base extrait:', baseName);
-    } else if (media.type === 'music') {
-      // 3. Fichier musical - utiliser l'URL propre
-      navigationUrl = `/player/musiques/${media.id}`;
-    } else {
-      // 4. Média individuel (fallback)
-      navigationUrl = `/player/${encodeURIComponent(media.id)}`;
-      console.log('🔗 URL classique utilisée (fallback):', navigationUrl);
-      console.log('ℹ️ Média individuel ou format non reconnu');
-    }
-    
-    console.log('🚀 Navigation vers:', navigationUrl);
-    navigate(navigationUrl);
-  };
-
   const handleClose = () => {
     navigate(-1); // Go back to previous page
   };
@@ -211,7 +147,6 @@ const Details: React.FC = () => {
     <AnimatePresence>
       <MediaDetails
         media={media}
-        onPlay={handlePlay}
         onClose={handleClose}
         onAddToList={handleAddToList}
         watchProgress={watchProgress}
