@@ -216,6 +216,35 @@ app.get('/api/debug', (req, res) => {
   });
 });
 
+// Clear all caches endpoint
+app.get('/api/clear-cache', (req, res) => {
+  console.log('🧹 Clearing all caches...');
+  
+  // Clear server-side caches
+  sshCache.clear();
+  tmdbCache.clear();
+  categoryCache.clear();
+  albumArtworkCache.clear();
+  
+  console.log('✅ Server caches cleared');
+  
+  res.json({
+    success: true,
+    message: 'All server caches cleared successfully',
+    cleared: {
+      sshCache: 'cleared',
+      tmdbCache: 'cleared', 
+      categoryCache: 'cleared',
+      albumArtworkCache: 'cleared'
+    },
+    clientCacheInfo: {
+      message: 'To clear client cache, open DevTools > Application > Storage > Clear all, or do a hard refresh (Ctrl+Shift+R)',
+      localStorage: 'Use localStorage.clear() in console',
+      indexedDB: 'Clear "streaming-cache" database in DevTools'
+    }
+  });
+});
+
 
 // Search media
 app.get('/api/search', async (req, res) => {

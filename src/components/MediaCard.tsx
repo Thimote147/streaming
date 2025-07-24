@@ -5,6 +5,7 @@ import type { MediaItem } from '../services/api';
 import { useMovieData } from '../hooks/useMovieData';
 import { usePlayer } from '../utils/usePlayer';
 import { useImagePreloader } from '../hooks/useImagePreloader';
+import { useWatchProgress } from '../hooks/useWatchProgress';
 
 interface MediaCardProps {
   media: MediaItem;
@@ -20,7 +21,9 @@ const MediaCard: React.FC<MediaCardProps> = ({
   index = 0 
 }) => {
   const [isHovered, setIsHovered] = React.useState(false);
+  const [watchProgress, setWatchProgress] = React.useState<number | null>(null);
   const { startPlaying } = usePlayer();
+  const { getProgressForMovie } = useWatchProgress();
   
   // Only fetch TMDB data for movies and series, not for music
   const shouldFetchTMDB = media.type === 'movie' || media.type === 'series';
@@ -39,6 +42,22 @@ const MediaCard: React.FC<MediaCardProps> = ({
 
   // Preload the image to avoid flash
   const { isLoaded: imageLoaded, error: imageError } = useImagePreloader(displayPoster || null);
+
+  // Fetch watch progress for movies and series (not music)
+  React.useEffect(() => {
+    const fetchProgress = async () => {
+      if ((media.type === 'movie' || media.type === 'series') && media.path) {
+        try {
+          const progress = await getProgressForMovie(media.path);
+          setWatchProgress(progress?.progress_percentage || null);
+        } catch (error) {
+          console.error('Error fetching progress:', error);
+        }
+      }
+    };
+
+    fetchProgress();
+  }, [media.path, media.type, getProgressForMovie]);
   
   
   // Use TMDB release year as primary source, fallback to file year
@@ -220,12 +239,12 @@ const MediaCard: React.FC<MediaCardProps> = ({
           </div>
         </motion.div>
 
-        {/* Progress Bar (if applicable) */}
-        {Math.random() > 0.7 && (
-          <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-700">
+        {/* Progress Bar - Only for movies and series with actual progress */}
+        {watchProgress !== null && watchProgress > 0 && watchProgress < 100 && (media.type === 'movie' || media.type === 'series') && (
+          <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-700/80">
             <div 
               className="h-full bg-red-600 transition-all duration-300"
-              style={{ width: `${Math.random() * 100}%` }}
+              style={{ width: `${watchProgress}%` }}
             />
           </div>
         )}

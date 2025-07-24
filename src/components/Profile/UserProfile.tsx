@@ -4,6 +4,7 @@ import { User, Mail, Calendar, LogOut, Edit3, Save, X, Shield, History } from 'l
 import { useAuth } from '../../hooks/useAuth';
 import AccessRequestManager from '../Admin/AccessRequestManager';
 import WatchHistoryView from '../WatchProgress/WatchHistoryView';
+import ClearCacheButton from '../ClearCacheButton';
 
 interface UserProfileProps {
   isOpen: boolean;
@@ -170,7 +171,15 @@ const UserProfile: React.FC<UserProfileProps> = ({ isOpen, onClose }) => {
                 </div>
               </div>
 
-              <div className="mt-8 pt-6 border-t border-gray-700/50">
+              <div className="mt-8 pt-6 border-t border-gray-700/50 space-y-4">
+                {/* Clear Cache Button */}
+                <div>
+                  <label className="text-sm font-medium text-gray-400 mb-3 block">Maintenance</label>
+                  <div className="p-4 bg-gray-800/30 rounded-lg">
+                    <ClearCacheButton />
+                  </div>
+                </div>
+                
                 <motion.button
                   onClick={handleSignOut}
                   className="w-full bg-red-600/20 hover:bg-red-600/30 border border-red-500/50 text-red-400 font-semibold py-3 px-6 rounded-lg transition-colors flex items-center justify-center gap-2"

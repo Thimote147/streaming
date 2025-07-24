@@ -326,7 +326,7 @@ const Header: React.FC<HeaderProps> = ({ onShowAuth, onShowProfile, isAuthentica
 
   return (
     <motion.header 
-      className="fixed top-0 left-0 right-0 z-50 backdrop-blur-sm bg-gradient-to-b from-black/90 via-black/50 to-transparent transition-all duration-500 ease-in-out"
+      className="fixed top-0 left-0 right-0 z-[90] backdrop-blur-sm bg-gradient-to-b from-black/90 via-black/50 to-transparent transition-all duration-500 ease-in-out"
       initial={{ opacity: 0, y: -20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6, ease: "easeOut" }}
@@ -611,8 +611,9 @@ const Header: React.FC<HeaderProps> = ({ onShowAuth, onShowProfile, isAuthentica
                       setTimeout(() => {
                         if (!searchRef.current?.contains(document.activeElement)) {
                           setIsMobileSearchFocused(false);
+                          setShowSearchResults(false);
                         }
-                      }, 100);
+                      }, 150);
                     }}
                   />
                   {isSearching && (
@@ -632,7 +633,7 @@ const Header: React.FC<HeaderProps> = ({ onShowAuth, onShowProfile, isAuthentica
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 5 }}
                   transition={{ duration: 0.15 }}
-                  className={`absolute top-full left-0 right-0 mt-2 bg-black/60 backdrop-blur-xl rounded-2xl shadow-2xl border border-gray-700/20 z-[60] overflow-hidden ${
+                  className={`absolute top-full left-0 right-0 mt-2 bg-black/90 backdrop-blur-xl rounded-2xl shadow-2xl border border-gray-700/20 z-[100] overflow-hidden ${
                     isMobileSearchFocused ? 'max-h-96' : 'max-h-72'
                   }`}
                 >
@@ -747,19 +748,21 @@ const Header: React.FC<HeaderProps> = ({ onShowAuth, onShowProfile, isAuthentica
             {(isAuthenticated || showAuthButton) && (
               <div className="mt-4 pt-4 border-t border-gray-700">
                 {isAuthenticated ? (
-                  <div className="flex items-center justify-between">
-                    <span className="text-white text-sm">
-                      Bonjour, {profile?.username}
-                    </span>
-                    <button
-                      onClick={() => {
-                        onShowProfile();
-                        setIsMobileMenuOpen(false);
-                      }}
-                      className="text-white hover:text-gray-300"
-                    >
-                      <User size={24} />
-                    </button>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-white text-sm">
+                        Bonjour, {profile?.username}
+                      </span>
+                      <button
+                        onClick={() => {
+                          onShowProfile();
+                          setIsMobileMenuOpen(false);
+                        }}
+                        className="text-white hover:text-gray-300"
+                      >
+                        <User size={24} />
+                      </button>
+                    </div>
                   </div>
                 ) : showAuthButton ? (
                   <button

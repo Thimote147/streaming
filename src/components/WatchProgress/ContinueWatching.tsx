@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Play, Clock, CheckCircle, Music, Film, Tv } from 'lucide-react';
+import { Play, Clock, CheckCircle, Music, Film, Tv, X } from 'lucide-react';
 import { useWatchProgress } from '../../hooks/useWatchProgress';
 import { useMovieData } from '../../hooks/useMovieData';
 import { streamingAPI } from '../../services/api';
@@ -14,9 +14,10 @@ interface ContinueWatchingProps {
 interface MovieProgressItemProps {
   progress: WatchProgress;
   onMovieSelect: (moviePath: string, startTime?: number) => void;
+  onRemove?: (moviePath: string) => void;
 }
 
-const MovieProgressItem: React.FC<MovieProgressItemProps> = ({ progress, onMovieSelect }) => {
+const MovieProgressItem: React.FC<MovieProgressItemProps> = ({ progress, onMovieSelect, onRemove }) => {
   // Déterminer le type de média basé sur le nom du fichier ou le chemin
   const getMediaType = (moviePath: string) => {
     const ext = moviePath.toLowerCase().split('.').pop();
@@ -164,6 +165,23 @@ const MovieProgressItem: React.FC<MovieProgressItemProps> = ({ progress, onMovie
           <span className="text-xs text-white font-medium">{getMediaTypeLabel()}</span>
         </div>
 
+        {/* Remove button - plus visible et plus facile à cliquer */}
+        {onRemove && (
+          <motion.button
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              onRemove(progress.movie_path);
+            }}
+            className="absolute top-2 right-2 w-8 h-8 bg-black/80 hover:bg-red-600 backdrop-blur-sm rounded-full flex items-center justify-center opacity-80 hover:opacity-100 transition-all duration-300 z-50 border border-white/20 hover:border-red-400"
+            whileHover={{ scale: 1.15 }}
+            whileTap={{ scale: 0.9 }}
+            title="Supprimer de continuer à regarder"
+          >
+            <X size={14} className="text-white transition-colors" />
+          </motion.button>
+        )}
+
         {/* Play button overlay compact */}
         <motion.div
           className="absolute inset-0 bg-black/60 backdrop-blur-[2px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300"
@@ -258,7 +276,15 @@ const MovieProgressItem: React.FC<MovieProgressItemProps> = ({ progress, onMovie
 };
 
 const ContinueWatching: React.FC<ContinueWatchingProps> = ({ onMovieSelect }) => {
-  const { recentProgress, loading } = useWatchProgress();
+  const { recentProgress, loading, removeProgress } = useWatchProgress();
+
+  const handleRemoveProgress = async (moviePath: string) => {
+    try {
+      await removeProgress(moviePath);
+    } catch (error) {
+      console.error('Error removing progress:', error);
+    }
+  };
 
   // Filtrer les films en cours de visionnage (pas terminés)
   const inProgressMovies = recentProgress.filter(
@@ -325,6 +351,7 @@ const ContinueWatching: React.FC<ContinueWatchingProps> = ({ onMovieSelect }) =>
             <MovieProgressItem
               progress={progress}
               onMovieSelect={onMovieSelect}
+              onRemove={handleRemoveProgress}
             />
           </motion.div>
         ))}

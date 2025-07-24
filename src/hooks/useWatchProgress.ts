@@ -54,20 +54,35 @@ export const useWatchProgress = () => {
 
   // Obtenir la progression pour un film spécifique
   const getProgressForMovie = useCallback(async (moviePath: string): Promise<WatchProgress | null> => {
-    if (!user) return null;
+    if (!user) {
+      console.log('No user found, skipping progress fetch');
+      return null;
+    }
 
     try {
+      // Handle both encoded and decoded paths
+      let decodedPath = moviePath;
+      try {
+        // Only decode if it looks like it's encoded (contains %)
+        if (moviePath.includes('%')) {
+          decodedPath = decodeURIComponent(moviePath);
+        }
+      } catch {
+        // If decode fails, use original path
+        decodedPath = moviePath;
+      }
+      
       const { data, error } = await supabase
         .from('watch_progress')
         .select('*')
         .eq('user_id', user.id)
-        .eq('movie_path', moviePath)
+        .eq('movie_path', decodedPath)
         .single();
 
       if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows returned
       return data || null;
     } catch (error) {
-      console.error('Error fetching movie progress:', error);
+      console.error('Error fetching movie progress for path:', moviePath, error);
       return null;
     }
   }, [user]);
@@ -82,13 +97,23 @@ export const useWatchProgress = () => {
     if (!user) return;
 
     const progressPercentage = duration ? Math.round((currentTime / duration) * 100) : 0;
+    
+    // Handle both encoded and decoded paths
+    let decodedPath = moviePath;
+    try {
+      if (moviePath.includes('%')) {
+        decodedPath = decodeURIComponent(moviePath);
+      }
+    } catch {
+      decodedPath = moviePath;
+    }
 
     try {
       const { error } = await supabase
         .from('watch_progress')
         .upsert({
           user_id: user.id,
-          movie_path: moviePath,
+          movie_path: decodedPath,
           movie_title: movieTitle,
           current_position: Math.round(currentTime),
           duration: duration ? Math.round(duration) : null,
@@ -147,11 +172,21 @@ export const useWatchProgress = () => {
     if (!user) return;
 
     try {
+      // Handle both encoded and decoded paths
+      let decodedPath = moviePath;
+      try {
+        if (moviePath.includes('%')) {
+          decodedPath = decodeURIComponent(moviePath);
+        }
+      } catch {
+        decodedPath = moviePath;
+      }
+      
       const { error } = await supabase
         .from('watch_progress')
         .delete()
         .eq('user_id', user.id)
-        .eq('movie_path', moviePath);
+        .eq('movie_path', decodedPath);
 
       if (error) throw error;
       

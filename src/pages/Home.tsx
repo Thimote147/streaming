@@ -53,16 +53,28 @@ const Home: React.FC = () => {
       const cleanTitle = cleanTitleForUrl(fileName);
       navigationUrl = `/player/musiques/${cleanTitle}`;
     } else if (isSeries) {
-      const episodeMatch = fileName.match(/(.+?)[.\s]+S(\d+)E(\d+)/i);
+      const episodeMatch = fileName.match(/(.+?)[.\s]+S(\d+?)E(\d+)/i);
       if (episodeMatch) {
         const [, seriesTitle, season, episode] = episodeMatch;
         const cleanSeriesTitle = cleanTitleForUrl(seriesTitle);
-        navigationUrl = `/player/series/${cleanSeriesTitle}/${season}/${episode}`;
+        const seasonFormatted = `s${season.padStart(2, '0')}`;
+        const episodeFormatted = `e${episode.padStart(2, '0')}`;
+        navigationUrl = `/player/series/${cleanSeriesTitle}/${seasonFormatted}/${episodeFormatted}`;
       } else {
-        navigationUrl = `/player/${encodeURIComponent(fileName)}`;
+        const cleanTitle = cleanTitleForUrl(fileName);
+        navigationUrl = `/player/series/${cleanTitle}`;
       }
     } else {
-      navigationUrl = `/player/${encodeURIComponent(fileName)}`;
+      // Movies - need to extract sequel number or default to 1
+      const sequelMatch = fileName.match(/(.+?)\s+(\d+)$/);
+      if (sequelMatch) {
+        const [, baseTitle, number] = sequelMatch;
+        const cleanTitle = cleanTitleForUrl(baseTitle);
+        navigationUrl = `/player/films/${cleanTitle}/${number}`;
+      } else {
+        const cleanTitle = cleanTitleForUrl(fileName);
+        navigationUrl = `/player/films/${cleanTitle}/1`;
+      }
     }
     
     navigate(navigationUrl);
@@ -104,9 +116,9 @@ const Home: React.FC = () => {
       </motion.section>
 
       {/* Content Sections */}
-      <section className="relative -mt-32">
+      <section className="relative -mt-20">
         {/* Continue Watching Section */}
-        <div className="px-4 md:px-8 lg:px-12 mb-2">
+        <div className="px-4 md:px-8 lg:px-12 mb-8 pt-8">
           <ContinueWatching onMovieSelect={handleContinueWatching} />
         </div>
 
